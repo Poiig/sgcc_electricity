@@ -4,9 +4,10 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: '发布版本号（如 v1.0.0）'
-        required: true
+        description: '发布版本号（如 v1.0.0，留空则用 git sha）'
+        required: false
         type: string
+        default: ''
   push:
     branches:
       - main
@@ -16,10 +17,6 @@ on:
       - 'Dockerfile'
       - 'requirements.txt'
       - '.github/workflows/docker-publish.yml'
-
-env:
-  REGISTRY: docker.io
-  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/sgcc_electricity
 
 jobs:
   build-and-push:
@@ -32,26 +29,68 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set version tag
+        id: version
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            echo "tag=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check Docker Hub secrets
+        id: dockerhub
+        env:
+          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+        run: |
+          if [ -n "$DH_USER" ] && [ -n "$DH_TOKEN" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "image=docker.io/${DH_USER}/sgcc_electricity" >> "$GITHUB_OUTPUT"
+            echo "Docker Hub 已配置，将同时推送"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+            echo "Docker Hub 未配置（需 DOCKERHUB_USERNAME / DOCKERHUB_TOKEN），仅推送 GHCR"
+          fi
+
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Log in to Docker Hub
+        if: steps.dockerhub.outputs.enabled == 'true'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Prepare image list
+        id: images
+        run: |
+          IMAGES="ghcr.io/${{ github.repository }}"
+          if [ "${{ steps.dockerhub.outputs.enabled }}" = "true" ]; then
+            IMAGES="${IMAGES},${{ steps.dockerhub.outputs.image }}"
+          fi
+          echo "list=${IMAGES}" >> "$GITHUB_OUTPUT"
+          echo "将推送镜像: ${IMAGES}"
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          images: ${{ steps.images.outputs.list }}
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
-            type=raw,value=${{ inputs.version }},enable=${{ inputs.version != '' }}
+            type=raw,value=${{ steps.version.outputs.tag }}
             type=sha,prefix=,format=short
 
       - name: Build and push Docker image
@@ -64,6 +103,17 @@ jobs:
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
-            VERSION=${{ inputs.version || 'dev' }}
+            VERSION=${{ steps.version.outputs.tag }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Summary
+        run: |
+          echo "### 镜像已发布" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **GHCR**: \`ghcr.io/${{ github.repository }}:latest\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- **GHCR**: \`ghcr.io/${{ github.repository }}:${{ steps.version.outputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.dockerhub.outputs.enabled }}" = "true" ]; then
+            echo "- **Docker Hub**: \`${{ steps.dockerhub.outputs.image }}:latest\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- **Docker Hub**: \`${{ steps.dockerhub.outputs.image }}:${{ steps.version.outputs.tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
