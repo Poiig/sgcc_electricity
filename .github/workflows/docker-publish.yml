@@ -8,15 +8,6 @@ on:
         required: false
         type: string
         default: ''
-  push:
-    branches:
-      - main
-      - master
-    paths:
-      - 'scripts/**'
-      - 'Dockerfile'
-      - 'requirements.txt'
-      - '.github/workflows/docker-publish.yml'
 
 jobs:
   build-and-push:
