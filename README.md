@@ -50,9 +50,9 @@
 
 ```bash
 # 下载 docker-compose.yml 和配置模板
-mkdir sgcc_electricity && cd sgcc_electricity
-curl -O https://raw.githubusercontent.com/Poiig/sgcc_electricity_new/master/docker-compose.yml
-curl -O https://raw.githubusercontent.com/Poiig/sgcc_electricity_new/master/example.env
+mkdir ha_sgcc_electricity && cd ha_sgcc_electricity
+curl -O https://raw.githubusercontent.com/Poiig/ha_sgcc_electricity/master/docker-compose.yml
+curl -O https://raw.githubusercontent.com/Poiig/ha_sgcc_electricity/master/example.env
 cp example.env .env
 ```
 
@@ -115,8 +115,8 @@ docker compose up -d
 
 | 来源 | 地址 |
 |------|------|
-| GHCR（推荐） | `ghcr.io/poiig/sgcc_electricity_new:latest` |
-| Docker Hub | `poiig/sgcc_electricity:latest` |
+| GHCR（推荐） | `ghcr.io/poiig/ha_sgcc_electricity:latest` |
+| Docker Hub | `poiig/ha_sgcc_electricity:latest` |
 
 支持架构：`linux/amd64`、`linux/arm64`
 
