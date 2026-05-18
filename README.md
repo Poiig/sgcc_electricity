@@ -116,7 +116,7 @@ docker compose up -d
 | 来源 | 地址 |
 |------|------|
 | GHCR（推荐） | `ghcr.io/poiig/ha_sgcc_electricity:latest` |
-| Docker Hub | `poiig/ha_sgcc_electricity:latest` |
+| Docker Hub | `poiigzhao/ha_sgcc_electricity:latest` |
 
 支持架构：`linux/amd64`、`linux/arm64`
 

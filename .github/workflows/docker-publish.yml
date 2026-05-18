@@ -111,6 +111,16 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
+      - name: Update Docker Hub description
+        if: steps.dockerhub.outputs.enabled == 'true'
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ secrets.DOCKERHUB_USERNAME }}/ha_sgcc_electricity
+          short-description: 国家电网电费数据获取 - 支持 Home Assistant / 点选验证码自动识别
+          readme-filepath: ./README.md
+
       - name: Clean up old GHCR images (keep latest 10)
         uses: actions/delete-package-versions@v5
         with:

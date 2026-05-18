@@ -1,7 +1,7 @@
 services:
   sgcc_electricity_app:
     image: ghcr.io/poiig/ha_sgcc_electricity:latest
-    # 如果已配置 Docker Hub，可改为: <dockerhub_user>/ha_sgcc_electricity:latest
+    # 如果已配置 Docker Hub，可改为: poiigzhao/ha_sgcc_electricity:latest
     container_name: sgcc_electricity
     env_file:
       - .env
