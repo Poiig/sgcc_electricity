@@ -207,6 +207,13 @@ class DataFetcher:
 
     @staticmethod
     def _inject_stealth_cdp(driver) -> None:
+        # selenium 4.34 + Chromium 148 的 CDP 协议变更可能导致后续
+        # execute_script() 报 Runtime.evaluate 错误。Docker/Linux 环境下
+        # Chrome options 已有足够反检测能力，默认跳过 CDP 注入。
+        enable_cdp = os.getenv("ENABLE_CDP_STEALTH", "").lower() in ("true", "1", "yes")
+        if not enable_cdp:
+            logging.info("CDP stealth injection skipped (set ENABLE_CDP_STEALTH=true to enable)")
+            return
         try:
             driver.execute_cdp_cmd(
                 "Page.addScriptToEvaluateOnNewDocument",
