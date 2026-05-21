@@ -1067,7 +1067,7 @@ class DataFetcher:
         else:
             logging.warning(f"[{user_id}] 月度用电数据获取失败")
 
-        logging.info(f"[{user_id}] 正在获取每日用电量...")
+        logging.info(f"[{user_id}] 正在获取最近一日用电（Home Assistant 传感器）...")
         last_daily_date, last_daily_usage = self._get_yesterday_usage(driver)
         if last_daily_usage is None:
             # DOM 失败时使用 Vue state 数据
@@ -1076,7 +1076,7 @@ class DataFetcher:
         if last_daily_usage is not None:
             logging.info(f"[{user_id}] 最近用电: {last_daily_date} 用电 {last_daily_usage} kWh")
         else:
-            logging.warning(f"[{user_id}] 每日用电量获取失败 (DOM 和分时数据均未获取到)")
+            logging.warning(f"[{user_id}] 最近一日用电获取失败 (DOM 和 Vue state 均未获取到)")
 
         # 尝试获取电费账单明细（月度分时）
         bill_tou_data = None
@@ -1086,9 +1086,8 @@ class DataFetcher:
             except Exception as e:
                 logging.warning(f"[{user_id}] 电费账单分时数据获取失败: {e}")
 
-        # 数据库存储
+        # 数据库存储：先拉取 N 天日用电，再统一写入
         if self.db is not None:
-            logging.info(f"[{user_id}] 数据库类型: {self.db_type}, 开始保存数据到数据库")
             daily_records = self._get_daily_usage_data(driver, user_id)
             if daily_records:
                 if tou_data is None:
@@ -1103,6 +1102,7 @@ class DataFetcher:
             else:
                 date_list, usage_list = [], []
 
+            logging.info(f"[{user_id}] 日用电拉取完成，开始写入 {self.db_type.upper()} 数据库")
             self._save_user_data(
                 user_id, balance, enhanced_balance,
                 last_daily_date, last_daily_usage,
@@ -1478,7 +1478,7 @@ class DataFetcher:
             last_daily_date = date_element.text
             return last_daily_date, float(usage_element.text)
         except Exception as e:
-            logging.warning(f"[DOM] 获取日用电量失败 (将通过分时数据补充): {e}")
+            logging.warning(f"[{user_id}] DOM 获取最近一日用电失败 (将尝试 Vue state 或后续批量拉取补充): {e}")
             return None, None
 
     def _get_month_usage(self, driver):
