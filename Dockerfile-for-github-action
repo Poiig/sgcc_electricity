@@ -16,7 +16,9 @@ COPY scripts/* /app/
 WORKDIR /app
 
 RUN apt-get --allow-releaseinfo-change update \
-    && apt-get install -y --no-install-recommends jq chromium chromium-driver fonts-noto-cjk tzdata \
+    && apt-get install -y --no-install-recommends \
+        jq fonts-noto-cjk tzdata \
+        chromium chromium-driver \
     && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
     && echo $TZ > /etc/timezone \
     && dpkg-reconfigure --frontend noninteractive tzdata \
@@ -39,4 +41,4 @@ RUN mkdir /data \
 
 ENV LANG=C.UTF-8
 
-CMD ["python3","main.py"]
+CMD ["python3", "main.py"]
