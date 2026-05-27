@@ -68,7 +68,8 @@ def main():
     schedule.every().day.at(next_run_time.strftime("%H:%M")).do(run_task, fetcher)
 
     # 每5分钟重发一次数据，防止HA重启后数据丢失
-    schedule.every(5).minutes.do(updator.republish)
+    # 如果缓存数据日期与当前日期不一致，则从国家电网重新获取数据
+    schedule.every(5).minutes.do(republish_or_fetch, updator, fetcher)
 
     # 启动时先尝试从缓存恢复
     # 如果缓存恢复成功，则跳过本次启动时的实时抓取，避免频繁重启导致账号被封
@@ -81,6 +82,12 @@ def main():
     while True:
         schedule.run_pending()
         time.sleep(1)
+
+
+def republish_or_fetch(updator: SensorUpdator, fetcher: DataFetcher):
+    if not updator.republish():
+        logging.info("缓存数据已过期或不存在，正在从国家电网获取数据...")
+        run_task(fetcher)
 
 
 def run_task(data_fetcher: DataFetcher):

@@ -112,10 +112,18 @@ class SensorUpdator:
             logging.error(f"加载缓存文件失败 {abs_cache_file}: {e}")
             return False
 
+        # 检查缓存数据的日期是否与当前日期一致
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        for user_id, values in data.items():
+            cache_timestamp = values.get("timestamp", "")
+            cache_date = cache_timestamp[:10] if cache_timestamp else ""
+            if cache_date != today_str:
+                logging.info(f"缓存数据日期({cache_date})与当前日期({today_str})不一致，需要从国家电网重新获取数据。")
+                return False
+
         try:
             for user_id, values in data.items():
                 logging.info(f"正在从缓存重新推送用户 {user_id} 的数据。")
-                # Filter out 'timestamp' from values before passing to update_one_userid
                 clean_values = {k: v for k, v in values.items() if k != 'timestamp'}
                 self.update_one_userid(user_id, **clean_values, notify=False)
             return True
