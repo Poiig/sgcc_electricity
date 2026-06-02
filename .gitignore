@@ -9,6 +9,7 @@ venv/
 docs/*
 !docs/DATABASE.md
 !docs/HA_CONFIG.md
+!docs/LLM_CAPTCHA.md
 
 # Debug / captcha / screenshot output
 pages/
