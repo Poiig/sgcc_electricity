@@ -74,7 +74,7 @@ DB_TYPE=mysql
 
 | 户号 / 日 / 月 / 年 / 余额 / 阶梯 | SQLite / MySQL |
 
-| 运行记录 | `balance_log`（每次同步写入的余额快照） |
+| 运行记录 | `balance_log`（按户号分组，每户最近 5 条，时间为同步完成 `created_at`） |
 
 | 应用日志 | `data/app.log` |
 

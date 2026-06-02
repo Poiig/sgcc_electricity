@@ -38,6 +38,9 @@
     .sync-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-bottom: 1rem; }
     .sync-table th, .sync-table td { border-bottom: 1px solid var(--border); padding: 0.45rem 0.5rem; text-align: left; }
     .sync-table th { color: var(--muted); font-weight: 500; }
+    .log-user-group { margin-bottom: 1.25rem; }
+    .log-user-group h3 { font-size: 0.9rem; color: var(--text); margin-bottom: 0.5rem; font-weight: 600; }
+    .log-user-group h3 span { color: var(--muted); font-weight: 400; font-size: 0.82rem; }
     .status-pill { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.75rem; background: #243044; }
     .status-pill.running { background: #422006; color: var(--warn); }
     .status-pill.success { background: #064e3b; color: var(--accent2); }
@@ -451,19 +454,26 @@
       $("fetchBtn").disabled = !st.can_fetch || !dbEnabled;
     }
 
-    function renderBalanceLogs(records) {
-      if (!records.length) {
+    function renderBalanceLogs(groups) {
+      if (!groups.length) {
         $("syncLogWrap").innerHTML = '<p class="hint">暂无 balance_log 记录，完成一次同步后将在此显示各户号余额写入记录。</p>';
         return;
       }
-      $("syncLogWrap").innerHTML = `<table class="sync-table"><thead><tr><th>写入时间</th><th>户号</th><th>户名</th><th>记录日</th><th>余额(元)</th><th>应交(元)</th></tr></thead><tbody>${
-        records.map(r => `<tr><td>${r.created_at || "—"}</td><td>${r.user_id || "—"}</td><td>${r.user_name || "—"}</td><td>${r.as_of || "—"}</td><td>${r.balance != null ? r.balance : "—"}</td><td>${r.amount_due != null ? r.amount_due : "—"}</td></tr>`).join("")
-      }</tbody></table>`;
+      $("syncLogWrap").innerHTML = groups.map(g => `
+        <div class="log-user-group">
+          <h3>${g.user_name || g.user_id} <span>${g.user_id} · 最近 ${(g.records || []).length} 条</span></h3>
+          <table class="sync-table">
+            <thead><tr><th>同步时间</th><th>余额(元)</th><th>应交(元)</th></tr></thead>
+            <tbody>${(g.records || []).map(r =>
+              `<tr><td>${r.sync_at || "—"}</td><td>${r.balance != null ? r.balance : "—"}</td><td>${r.amount_due != null ? r.amount_due : "—"}</td></tr>`
+            ).join("")}</tbody>
+          </table>
+        </div>`).join("");
     }
 
     async function loadLogs() {
-      const data = await api("/api/logs?limit=100&app_lines=150");
-      renderBalanceLogs(data.balance_records || []);
+      const data = await api("/api/logs?per_user=5&app_lines=150");
+      renderBalanceLogs(data.balance_groups || []);
       $("logBox").textContent = (data.app_lines || []).join("\n") || "（暂无 app.log）";
       $("logBox").scrollTop = $("logBox").scrollHeight;
     }

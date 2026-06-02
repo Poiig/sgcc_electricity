@@ -119,16 +119,54 @@ def _execute(sql: str, params: tuple = ()) -> bool:
 
 
 
-def list_balance_logs(limit: int = 100) -> List[dict]:
-    """balance_log：每次同步写入的余额快照，作为 Web 运行记录展示。"""
+def _format_datetime(val) -> Optional[str]:
+    if val is None:
+        return None
+    if isinstance(val, datetime):
+        return val.strftime("%Y-%m-%d %H:%M:%S")
+    text = str(val).strip()
+    if not text:
+        return None
+    text = text.replace("Z", "").split("+")[0].strip()
+    normalized = text[:19].replace("T", " ")
+    for fmt, size in (("%Y-%m-%d %H:%M:%S", 19), ("%Y-%m-%d", 10)):
+        try:
+            dt = datetime.strptime(normalized[:size], fmt)
+            return dt.strftime("%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            continue
+    return normalized
+
+
+def list_balance_logs(per_user: int = 5) -> List[dict]:
+    """按户号分组，每户保留最近 per_user 条 balance_log（按 created_at 同步完成时间）。"""
     if not is_db_enabled():
         return []
-    limit = max(1, min(limit, 500))
-    return _query(
-        "SELECT user_id, user_name, as_of, balance, amount_due, created_at "
-        "FROM balance_log ORDER BY created_at DESC LIMIT ?",
-        (limit,),
+    per_user = max(1, min(per_user, 20))
+    rows = _query(
+        "SELECT user_id, user_name, balance, amount_due, created_at "
+        "FROM balance_log ORDER BY created_at DESC LIMIT 500"
     )
+    counts: dict[str, int] = {}
+    grouped: dict[str, dict] = {}
+    for row in rows:
+        uid = str(row.get("user_id") or "")
+        if not uid or counts.get(uid, 0) >= per_user:
+            continue
+        counts[uid] = counts.get(uid, 0) + 1
+        record = {
+            "sync_at": _format_datetime(row.get("created_at")),
+            "balance": row.get("balance"),
+            "amount_due": row.get("amount_due"),
+        }
+        if uid not in grouped:
+            grouped[uid] = {
+                "user_id": uid,
+                "user_name": row.get("user_name") or uid,
+                "records": [],
+            }
+        grouped[uid]["records"].append(record)
+    return sorted(grouped.values(), key=lambda x: x["user_id"])
 
 
 def latest_balance_log_timestamp() -> Optional[float]:
