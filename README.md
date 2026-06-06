@@ -37,9 +37,9 @@
 
 **集成到 Home Assistant 界面**（推荐）：
 
-通过 HA 的 **Webpage 仪表盘** 功能，可将 Web 控制台直接嵌入左侧菜单。操作步骤：**设置** → **仪表盘** → **添加仪表盘** → 选择 **Webpage** → 填写 URL（`http://HA地址:8080`）即可。
+通过 HA 的 **Webpage 仪表盘** 功能，可将 Web 控制台直接嵌入左侧菜单。操作步骤：**设置** → **仪表盘** → **添加仪表盘** → 选择 **Webpage** → 填写 URL 即可。
 
-> 详细说明见 [面板集成指南](docs/HA_PANEL.md) 或 [快速指南](docs/QUICK_PANEL.md)。
+> **注意**：如果 HA 通过 HTTPS 访问，Web 控制台 URL 也必须是 HTTPS（通过 Nginx 反代解决）。详见 [面板集成指南](docs/HA_PANEL.md) 或 [快速指南](docs/QUICK_PANEL.md)。
 
 | 登录页 | 监控大屏 |
 |:---:|:---:|

@@ -47,10 +47,10 @@ Add-on 默认启用 Web 控制台，可通过 `http://homeassistant.local:8080` 
 1. **设置** → **仪表盘** → **添加仪表盘**
 2. 选择 **Webpage（网页）**
 3. 名称填 `国家电网电费数据`，图标选 `mdi:lightning-bolt`
-4. URL 填 `http://homeassistant.local:8080`（替换为实际地址）
+4. URL 填写 Web 控制台地址（纯内网用 `http://内网IP:8080`）
 5. 创建后左侧菜单即可看到入口
 
-> 详细说明见 [面板集成指南](../../docs/HA_PANEL.md) 或 [快速指南](../../docs/QUICK_PANEL.md)。
+> **注意**：如果 HA 通过 HTTPS（公网 / Nginx 反代）访问，需要通过 Nginx 反代 Web 控制台使其也走 HTTPS，否则浏览器会阻止加载。详见 [面板集成指南](../../docs/HA_PANEL.md)。
 
 ## 说明
 
