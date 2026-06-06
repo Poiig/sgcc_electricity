@@ -253,6 +253,47 @@ def _register_routes(router: APIRouter) -> None:
     def api_env_reload():
         return reload_env()
 
+    @router.post("/api/logs/clear", dependencies=[Depends(require_auth)])
+    def api_logs_clear():
+        """清除应用日志文件。"""
+        try:
+            from const import get_data_dir
+            log_file = Path(get_data_dir()) / "app.log"
+            if log_file.exists():
+                log_file.unlink()
+                logger.info("日志文件已清除")
+                return {"ok": True, "message": "日志已清除"}
+            else:
+                return {"ok": True, "message": "日志文件不存在"}
+        except Exception as e:
+            logger.error("清除日志失败: %s", e)
+            raise HTTPException(status_code=500, detail=f"清除日志失败: {str(e)}")
+
+    @router.post("/api/mqtt/republish", dependencies=[Depends(require_auth)])
+    def api_mqtt_republish():
+        """立即从缓存重新发布 MQTT 数据。"""
+        try:
+            from mqtt_sensor_updator import MQTTSensorUpdator
+            updator = MQTTSensorUpdator()
+
+            if not updator.mqtt_client.mqtt_host:
+                raise HTTPException(status_code=400, detail="MQTT 未配置")
+
+            if not updator.mqtt_client.connected:
+                raise HTTPException(status_code=503, detail="MQTT 未连接")
+
+            success = updator.republish()
+            if success:
+                logger.info("已通过 Web 控制台触发 MQTT 重新发布")
+                return {"ok": True, "message": "MQTT 数据已重新发布"}
+            else:
+                raise HTTPException(status_code=500, detail="MQTT 重新发布失败，请查看日志")
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error("MQTT 重新发布失败: %s", e)
+            raise HTTPException(status_code=500, detail=f"MQTT 重新发布失败: {str(e)}")
+
 
 def create_app() -> FastAPI:
     app = FastAPI(title="国家电网数据同步控制台", docs_url=None, redoc_url=None)

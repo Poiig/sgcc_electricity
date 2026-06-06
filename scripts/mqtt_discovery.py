@@ -146,10 +146,10 @@ class MQTTDiscoveryClient:
         object_id = entity_id.replace("sensor.", "")
         config = {
             "name": name,
-            "unique_id": object_id,
+            "unique_id": entity_id,  # 使用完整的 entity_id 作为 unique_id
+            "object_id": object_id,  # 去掉 sensor. 前缀的 object_id
             "state_topic": f"{self.mqtt_topic_prefix}/sensor/{object_id}/state",
             "device": self._get_device_info(user_id, user_name),
-            "object_id": object_id,
         }
 
         if unit:
