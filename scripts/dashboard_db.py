@@ -12,6 +12,11 @@ try:
 except ImportError:
     mysql = None
 
+try:
+    import psycopg2
+except ImportError:
+    psycopg2 = None
+
 
 def is_db_enabled() -> bool:
     return os.getenv("DB_TYPE", "sqlite").lower() not in ("none", "")
@@ -63,6 +68,33 @@ def _mysql_conn():
         return None
 
 
+def _pg_conn():
+    if psycopg2 is None:
+        return None
+    try:
+        dsn_parts = []
+        host = os.getenv("PG_HOST") or os.getenv("POSTGRES_HOST")
+        if host:
+            dsn_parts.append(f"host={host}")
+        port = os.getenv("PG_PORT") or os.getenv("POSTGRES_PORT", "5432")
+        dsn_parts.append(f"port={port}")
+        dbname = os.getenv("PG_DATABASE") or os.getenv("POSTGRES_DB") or os.getenv("PG_DB")
+        if dbname:
+            dsn_parts.append(f"dbname={dbname}")
+        user = os.getenv("PG_USER") or os.getenv("POSTGRES_USER")
+        if user:
+            dsn_parts.append(f"user={user}")
+        password = os.getenv("PG_PASSWORD") or os.getenv("POSTGRES_PASSWORD")
+        if password:
+            dsn_parts.append(f"password={password}")
+        sslmode = os.getenv("PG_SSLMODE", "")
+        if sslmode:
+            dsn_parts.append(f"sslmode={sslmode}")
+        return psycopg2.connect(" ".join(dsn_parts))
+    except Exception:
+        return None
+
+
 def _rows_to_dicts(cursor, rows) -> List[dict]:
     if not rows:
         return []
@@ -74,18 +106,23 @@ def _query(sql: str, params: tuple = ()) -> List[dict]:
     if not is_db_enabled():
         return []
     db_type = os.getenv("DB_TYPE", "sqlite").lower()
-    if db_type == "mysql":
+    if db_type in ("mysql", "postgresql"):
         sql = sql.replace("?", "%s")
-    conn = _mysql_conn() if db_type == "mysql" else _sqlite_conn(readonly=True)
+    if db_type == "mysql":
+        conn = _mysql_conn()
+    elif db_type == "postgresql":
+        conn = _pg_conn()
+    else:
+        conn = _sqlite_conn(readonly=True)
     if conn is None:
         return []
     try:
         cur = conn.cursor()
         cur.execute(sql, params)
         rows = cur.fetchall()
-        if db_type == "mysql":
-            return _rows_to_dicts(cur, rows)
-        return [dict(r) for r in rows]
+        if db_type == "sqlite":
+            return [dict(r) for r in rows]
+        return _rows_to_dicts(cur, rows)
     except Exception:
         return []
     finally:
@@ -99,9 +136,14 @@ def _execute(sql: str, params: tuple = ()) -> bool:
     if not is_db_enabled():
         return False
     db_type = os.getenv("DB_TYPE", "sqlite").lower()
-    if db_type == "mysql":
+    if db_type in ("mysql", "postgresql"):
         sql = sql.replace("?", "%s")
-    conn = _mysql_conn() if db_type == "mysql" else _sqlite_conn(readonly=False)
+    if db_type == "mysql":
+        conn = _mysql_conn()
+    elif db_type == "postgresql":
+        conn = _pg_conn()
+    else:
+        conn = _sqlite_conn(readonly=False)
     if conn is None:
         return False
     try:

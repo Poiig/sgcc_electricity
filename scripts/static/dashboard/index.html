@@ -303,7 +303,7 @@
       const banner = $("dbBanner");
       if (!dbEnabled) {
         banner.className = "banner";
-        banner.textContent = "未开启数据库（DB_TYPE=none），无法显示用电报表。请在 .env 中将 DB_TYPE 设为 sqlite 或 mysql 并完成同步。";
+        banner.textContent = "未开启数据库（DB_TYPE=none），无法显示用电报表。请在 .env 中将 DB_TYPE 设为 sqlite、mysql 或 postgresql 并完成同步。";
         banner.classList.remove("hidden");
         $("rowStepMonthly").classList.add("hidden");
         $("dailyComboCard").classList.add("hidden");

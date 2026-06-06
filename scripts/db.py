@@ -25,6 +25,7 @@ from datetime import datetime, timedelta
 from typing import Any, Optional
 
 import mysql.connector
+import psycopg2
 
 
 def _month_date_bounds(month: str) -> tuple[str, str]:
@@ -733,9 +734,354 @@ def create_db() -> Optional[DB]:
     db_type = os.getenv("DB_TYPE", "sqlite").lower()
     if db_type == "mysql":
         return MysqlDB()
+    if db_type == "postgresql":
+        return PostgresqlDB()
     if db_type == "sqlite":
         return SqliteDB()
     return None
+
+
+# ---------------------------------------------------------------------------
+# PostgreSQL implementation
+# ---------------------------------------------------------------------------
+
+class PostgresqlDB(DB):
+    USERS_TABLE = "users"
+    DAILY_TABLE = "daily_usage"
+    MONTHLY_TABLE = "monthly_usage"
+    YEARLY_TABLE = "yearly_usage"
+    BALANCE_TABLE = "balance_log"
+    STEP_TABLE = "step_usage"
+
+    def __init__(self) -> None:
+        self.connect = None
+        self.user_id: Optional[str] = None
+
+    def connect_user_db(self, user_id: str) -> bool:
+        try:
+            self.user_id = str(user_id).strip()
+            if not self.user_id:
+                raise ValueError("user_id cannot be empty")
+
+            dsn_parts = []
+            host = os.getenv("PG_HOST") or os.getenv("POSTGRES_HOST")
+            if host:
+                dsn_parts.append(f"host={host}")
+            port = os.getenv("PG_PORT") or os.getenv("POSTGRES_PORT", "5432")
+            dsn_parts.append(f"port={port}")
+            dbname = os.getenv("PG_DATABASE") or os.getenv("POSTGRES_DB") or os.getenv("PG_DB")
+            if dbname:
+                dsn_parts.append(f"dbname={dbname}")
+            user = os.getenv("PG_USER") or os.getenv("POSTGRES_USER")
+            if user:
+                dsn_parts.append(f"user={user}")
+            password = os.getenv("PG_PASSWORD") or os.getenv("POSTGRES_PASSWORD")
+            if password:
+                dsn_parts.append(f"password={password}")
+            sslmode = os.getenv("PG_SSLMODE", "")
+            if sslmode:
+                dsn_parts.append(f"sslmode={sslmode}")
+
+            self.connect = psycopg2.connect(" ".join(dsn_parts))
+            self.connect.autocommit = False
+            self._create_schema()
+            logging.info("PostgreSQL 已连接，户号 %s", self.user_id)
+            return True
+        except Exception as exc:
+            logging.error("PostgreSQL 连接失败: %s", exc)
+            return False
+
+    def _create_schema(self) -> None:
+        cursor = self.connect.cursor()
+        try:
+            cursor.execute(f"""CREATE TABLE IF NOT EXISTS {self.USERS_TABLE} (
+                user_id VARCHAR(50) PRIMARY KEY NOT NULL,
+                phone_number VARCHAR(50) NOT NULL DEFAULT '',
+                user_name VARCHAR(100) NOT NULL DEFAULT '',
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )""")
+
+            cursor.execute(f"""CREATE TABLE IF NOT EXISTS {self.DAILY_TABLE} (
+                user_id VARCHAR(50) NOT NULL,
+                user_name VARCHAR(100) NOT NULL DEFAULT '',
+                date DATE NOT NULL,
+                total_usage DOUBLE PRECISION NOT NULL DEFAULT 0,
+                valley_usage DOUBLE PRECISION NOT NULL DEFAULT 0,
+                flat_usage DOUBLE PRECISION NOT NULL DEFAULT 0,
+                peak_usage DOUBLE PRECISION NOT NULL DEFAULT 0,
+                tip_usage DOUBLE PRECISION NOT NULL DEFAULT 0,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, date)
+            )""")
+
+            cursor.execute(f"""CREATE TABLE IF NOT EXISTS {self.MONTHLY_TABLE} (
+                user_id VARCHAR(50) NOT NULL,
+                user_name VARCHAR(100) NOT NULL DEFAULT '',
+                month VARCHAR(7) NOT NULL,
+                total_usage DOUBLE PRECISION NOT NULL DEFAULT 0,
+                total_charge DOUBLE PRECISION,
+                valley_usage DOUBLE PRECISION NOT NULL DEFAULT 0,
+                flat_usage DOUBLE PRECISION NOT NULL DEFAULT 0,
+                peak_usage DOUBLE PRECISION NOT NULL DEFAULT 0,
+                tip_usage DOUBLE PRECISION NOT NULL DEFAULT 0,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, month)
+            )""")
+
+            cursor.execute(f"""CREATE TABLE IF NOT EXISTS {self.YEARLY_TABLE} (
+                user_id VARCHAR(50) NOT NULL,
+                user_name VARCHAR(100) NOT NULL DEFAULT '',
+                year VARCHAR(4) NOT NULL,
+                total_usage DOUBLE PRECISION NOT NULL DEFAULT 0,
+                total_charge DOUBLE PRECISION,
+                valley_usage DOUBLE PRECISION NOT NULL DEFAULT 0,
+                flat_usage DOUBLE PRECISION NOT NULL DEFAULT 0,
+                peak_usage DOUBLE PRECISION NOT NULL DEFAULT 0,
+                tip_usage DOUBLE PRECISION NOT NULL DEFAULT 0,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, year)
+            )""")
+
+            cursor.execute(f"""CREATE TABLE IF NOT EXISTS {self.BALANCE_TABLE} (
+                user_id VARCHAR(50) NOT NULL,
+                user_name VARCHAR(100) NOT NULL DEFAULT '',
+                as_of DATE NOT NULL,
+                balance DOUBLE PRECISION,
+                amount_due DOUBLE PRECISION,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, as_of)
+            )""")
+
+            cursor.execute(f"""CREATE TABLE IF NOT EXISTS {self.STEP_TABLE} (
+                user_id VARCHAR(50) NOT NULL,
+                user_name VARCHAR(100) NOT NULL DEFAULT '',
+                year_month VARCHAR(7) NOT NULL,
+                used_step1 DOUBLE PRECISION NOT NULL DEFAULT 0,
+                remain_step1 DOUBLE PRECISION NOT NULL DEFAULT 0,
+                used_step2 DOUBLE PRECISION NOT NULL DEFAULT 0,
+                remain_step2 DOUBLE PRECISION NOT NULL DEFAULT 0,
+                used_step3 DOUBLE PRECISION NOT NULL DEFAULT 0,
+                total_usage DOUBLE PRECISION NOT NULL DEFAULT 0,
+                step_stage INTEGER NOT NULL DEFAULT 1,
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, year_month)
+            )""")
+
+            self.connect.commit()
+        except Exception as exc:
+            self.connect.rollback()
+            logging.error("PostgreSQL 表结构创建失败: %s", exc)
+        finally:
+            cursor.close()
+
+    def upsert_user(self, user_id: str, phone_number: str = "", user_name: str = "") -> bool:
+        return self._execute(
+            f"""INSERT INTO {self.USERS_TABLE} (user_id, phone_number, user_name, updated_at)
+                VALUES (%s, %s, %s, CURRENT_TIMESTAMP)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    phone_number = EXCLUDED.phone_number,
+                    user_name = CASE WHEN EXCLUDED.user_name != '' THEN EXCLUDED.user_name ELSE {self.USERS_TABLE}.user_name END,
+                    updated_at = CURRENT_TIMESTAMP""",
+            (str(user_id).strip(), str(phone_number), str(user_name)),
+        )
+
+    def insert_daily_data(self, data: dict) -> bool:
+        date = str(data["date"]).strip()
+        return self._execute(
+            f"""INSERT INTO {self.DAILY_TABLE} (user_id, user_name, date, total_usage, valley_usage, flat_usage, peak_usage, tip_usage)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (user_id, date) DO UPDATE SET
+                    user_name = CASE WHEN EXCLUDED.user_name != '' THEN EXCLUDED.user_name ELSE {self.DAILY_TABLE}.user_name END,
+                    total_usage = EXCLUDED.total_usage,
+                    valley_usage = CASE WHEN EXCLUDED.valley_usage > 0 THEN EXCLUDED.valley_usage ELSE {self.DAILY_TABLE}.valley_usage END,
+                    flat_usage = CASE WHEN EXCLUDED.flat_usage > 0 THEN EXCLUDED.flat_usage ELSE {self.DAILY_TABLE}.flat_usage END,
+                    peak_usage = CASE WHEN EXCLUDED.peak_usage > 0 THEN EXCLUDED.peak_usage ELSE {self.DAILY_TABLE}.peak_usage END,
+                    tip_usage = CASE WHEN EXCLUDED.tip_usage > 0 THEN EXCLUDED.tip_usage ELSE {self.DAILY_TABLE}.tip_usage END,
+                    updated_at = CURRENT_TIMESTAMP""",
+            (self.user_id, data.get("user_name", ""),
+             date,
+             _sf(data.get("total_usage"), 0.0), _sf(data.get("valley_usage"), 0.0),
+             _sf(data.get("flat_usage"), 0.0), _sf(data.get("peak_usage"), 0.0),
+             _sf(data.get("tip_usage"), 0.0)),
+        )
+
+    def insert_monthly_data(self, data: dict) -> bool:
+        month = str(data["month"]).strip()
+        return self._execute(
+            f"""INSERT INTO {self.MONTHLY_TABLE} (user_id, user_name, month, total_usage, total_charge, valley_usage, flat_usage, peak_usage, tip_usage)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (user_id, month) DO UPDATE SET
+                    user_name = CASE WHEN EXCLUDED.user_name != '' THEN EXCLUDED.user_name ELSE {self.MONTHLY_TABLE}.user_name END,
+                    total_usage = COALESCE(EXCLUDED.total_usage, {self.MONTHLY_TABLE}.total_usage),
+                    total_charge = COALESCE(EXCLUDED.total_charge, {self.MONTHLY_TABLE}.total_charge),
+                    valley_usage = CASE WHEN EXCLUDED.valley_usage > 0 THEN EXCLUDED.valley_usage ELSE {self.MONTHLY_TABLE}.valley_usage END,
+                    flat_usage = CASE WHEN EXCLUDED.flat_usage > 0 THEN EXCLUDED.flat_usage ELSE {self.MONTHLY_TABLE}.flat_usage END,
+                    peak_usage = CASE WHEN EXCLUDED.peak_usage > 0 THEN EXCLUDED.peak_usage ELSE {self.MONTHLY_TABLE}.peak_usage END,
+                    tip_usage = CASE WHEN EXCLUDED.tip_usage > 0 THEN EXCLUDED.tip_usage ELSE {self.MONTHLY_TABLE}.tip_usage END,
+                    updated_at = CURRENT_TIMESTAMP""",
+            (self.user_id, data.get("user_name", ""),
+             month,
+             _sf(data.get("total_usage"), 0.0), _sf(data.get("total_charge")),
+             _sf(data.get("valley_usage"), 0.0), _sf(data.get("flat_usage"), 0.0),
+             _sf(data.get("peak_usage"), 0.0), _sf(data.get("tip_usage"), 0.0)),
+        )
+
+    def insert_yearly_data(self, data: dict) -> bool:
+        year = str(data["year"]).strip()
+        return self._execute(
+            f"""INSERT INTO {self.YEARLY_TABLE} (user_id, user_name, year, total_usage, total_charge, valley_usage, flat_usage, peak_usage, tip_usage)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (user_id, year) DO UPDATE SET
+                    user_name = CASE WHEN EXCLUDED.user_name != '' THEN EXCLUDED.user_name ELSE {self.YEARLY_TABLE}.user_name END,
+                    total_usage = COALESCE(EXCLUDED.total_usage, {self.YEARLY_TABLE}.total_usage),
+                    total_charge = COALESCE(EXCLUDED.total_charge, {self.YEARLY_TABLE}.total_charge),
+                    valley_usage = CASE WHEN EXCLUDED.valley_usage > 0 THEN EXCLUDED.valley_usage ELSE {self.YEARLY_TABLE}.valley_usage END,
+                    flat_usage = CASE WHEN EXCLUDED.flat_usage > 0 THEN EXCLUDED.flat_usage ELSE {self.YEARLY_TABLE}.flat_usage END,
+                    peak_usage = CASE WHEN EXCLUDED.peak_usage > 0 THEN EXCLUDED.peak_usage ELSE {self.YEARLY_TABLE}.peak_usage END,
+                    tip_usage = CASE WHEN EXCLUDED.tip_usage > 0 THEN EXCLUDED.tip_usage ELSE {self.YEARLY_TABLE}.tip_usage END,
+                    updated_at = CURRENT_TIMESTAMP""",
+            (self.user_id, data.get("user_name", ""),
+             year,
+             _sf(data.get("total_usage"), 0.0), _sf(data.get("total_charge")),
+             _sf(data.get("valley_usage"), 0.0), _sf(data.get("flat_usage"), 0.0),
+             _sf(data.get("peak_usage"), 0.0), _sf(data.get("tip_usage"), 0.0)),
+        )
+
+    def insert_balance_log(self, data: dict) -> bool:
+        as_of_raw = data.get("as_of") or datetime.now().strftime("%Y-%m-%d")
+        as_of = str(as_of_raw).strip()[:10]
+        return self._execute(
+            f"""INSERT INTO {self.BALANCE_TABLE} (user_id, user_name, as_of, balance, amount_due)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (user_id, as_of) DO UPDATE SET
+                    user_name = CASE WHEN EXCLUDED.user_name != '' THEN EXCLUDED.user_name ELSE {self.BALANCE_TABLE}.user_name END,
+                    balance = EXCLUDED.balance,
+                    amount_due = EXCLUDED.amount_due""",
+            (self.user_id, data.get("user_name", ""),
+             as_of,
+             _sf(data.get("balance")), _sf(data.get("amount_due"))),
+        )
+
+    def insert_step_data(self, data: dict) -> bool:
+        year_month = str(data["year_month"]).strip()
+        return self._execute(
+            f"""INSERT INTO {self.STEP_TABLE} (user_id, user_name, year_month, used_step1, remain_step1, used_step2, remain_step2, used_step3, total_usage, step_stage)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                ON CONFLICT (user_id, year_month) DO UPDATE SET
+                    user_name = CASE WHEN EXCLUDED.user_name != '' THEN EXCLUDED.user_name ELSE {self.STEP_TABLE}.user_name END,
+                    used_step1 = EXCLUDED.used_step1,
+                    remain_step1 = EXCLUDED.remain_step1,
+                    used_step2 = EXCLUDED.used_step2,
+                    remain_step2 = EXCLUDED.remain_step2,
+                    used_step3 = EXCLUDED.used_step3,
+                    total_usage = EXCLUDED.total_usage,
+                    step_stage = EXCLUDED.step_stage,
+                    updated_at = CURRENT_TIMESTAMP""",
+            (self.user_id, data.get("user_name", ""),
+             year_month,
+             _sf(data.get("used_step1"), 0.0), _sf(data.get("remain_step1"), 0.0),
+             _sf(data.get("used_step2"), 0.0), _sf(data.get("remain_step2"), 0.0),
+             _sf(data.get("used_step3"), 0.0), _sf(data.get("total_usage"), 0.0),
+             int(data.get("step_stage", 1))),
+        )
+
+    def query_month_tou_from_daily(self, user_id: str, month: str) -> Optional[dict]:
+        uid = str(user_id).strip()
+        month_key = str(month).strip()[:7]
+        start_date, end_date = _month_date_bounds(month_key)
+        cursor = self.connect.cursor()
+        try:
+            cursor.execute(
+                f"""SELECT COALESCE(SUM(total_usage),0), COALESCE(SUM(valley_usage),0),
+                           COALESCE(SUM(flat_usage),0), COALESCE(SUM(peak_usage),0),
+                           COALESCE(SUM(tip_usage),0), COUNT(*)
+                    FROM {self.DAILY_TABLE}
+                    WHERE user_id=%s AND date >= %s AND date <= %s""",
+                (uid, start_date, end_date),
+            )
+            return _row_to_month_tou_summary(month_key, cursor.fetchone())
+        finally:
+            cursor.close()
+
+    def sync_monthly_from_daily(self, month: str) -> bool:
+        summary = self.query_month_tou_from_daily(self.user_id, month)
+        if not summary:
+            return False
+        return self.insert_monthly_data({
+            "month": month,
+            "total_usage": summary["total_usage"],
+            "valley_usage": summary["valley_usage"],
+            "flat_usage": summary["flat_usage"],
+            "peak_usage": summary["peak_usage"],
+            "tip_usage": summary["tip_usage"],
+        })
+
+    def sync_yearly_from_monthly(self, year: str) -> bool:
+        cursor = self.connect.cursor()
+        try:
+            cursor.execute(
+                f"""SELECT COALESCE(SUM(total_usage),0), COALESCE(SUM(total_charge),0),
+                           COALESCE(SUM(valley_usage),0), COALESCE(SUM(flat_usage),0),
+                           COALESCE(SUM(peak_usage),0), COALESCE(SUM(tip_usage),0)
+                    FROM {self.MONTHLY_TABLE} WHERE user_id=%s AND SUBSTRING(month,1,4)=%s""",
+                (self.user_id, str(year).strip()),
+            )
+            row = cursor.fetchone()
+            if row is None:
+                return False
+            return self.insert_yearly_data({
+                "year": year,
+                "total_usage": float(row[0]), "total_charge": float(row[1]),
+                "valley_usage": float(row[2]), "flat_usage": float(row[3]),
+                "peak_usage": float(row[4]), "tip_usage": float(row[5]),
+            })
+        finally:
+            cursor.close()
+
+    def cleanup_old_data(self) -> None:
+        retention_days = int(os.getenv("DATA_RETENTION_DAYS", 365))
+        if retention_days <= 0:
+            return
+        cutoff = (datetime.now() - timedelta(days=retention_days)).strftime("%Y-%m-%d")
+        self._execute(f"DELETE FROM {self.DAILY_TABLE} WHERE user_id=%s AND date < %s", (self.user_id, cutoff))
+        self._execute(f"DELETE FROM {self.BALANCE_TABLE} WHERE user_id=%s AND as_of < %s", (self.user_id, cutoff))
+        logging.info("已清理户号 %s 早于 %s 的历史数据", self.user_id, cutoff)
+
+    def delete_user_data(self, user_id: str) -> None:
+        uid = str(user_id).strip()
+        for tbl in [self.DAILY_TABLE, self.MONTHLY_TABLE, self.YEARLY_TABLE,
+                     self.BALANCE_TABLE, self.STEP_TABLE, self.USERS_TABLE]:
+            self._execute(f"DELETE FROM {tbl} WHERE user_id=%s", (uid,))
+        logging.info("已删除户号 %s 的全部数据", user_id)
+
+    def _execute(self, sql: str, params: tuple = ()) -> bool:
+        if self.connect is None or self.connect.closed:
+            logging.error("PostgreSQL 未连接")
+            return False
+        cursor = None
+        try:
+            cursor = self.connect.cursor()
+            cursor.execute(sql, params)
+            self.connect.commit()
+            return True
+        except Exception as exc:
+            self.connect.rollback()
+            logging.error("PostgreSQL 执行失败: %s", exc)
+            return False
+        finally:
+            if cursor:
+                cursor.close()
+
+    def close_connect(self) -> None:
+        if self.connect and not self.connect.closed:
+            self.connect.close()
+            self.connect = None
+            logging.info("PostgreSQL 连接已关闭")
 
 
 def _sf(value: Any, default: Optional[float] = None) -> Optional[float]:

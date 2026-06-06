@@ -100,6 +100,10 @@ class DataFetcher:
             from db import MysqlDB
             self.db = MysqlDB()
             logging.info("使用 MySQL 数据库存储数据")
+        elif self.db_type == 'postgresql':
+            from db import PostgresqlDB
+            self.db = PostgresqlDB()
+            logging.info("使用 PostgreSQL 数据库存储数据")
         elif self.db_type == 'sqlite':
             from db import SqliteDB
             self.db = SqliteDB()
