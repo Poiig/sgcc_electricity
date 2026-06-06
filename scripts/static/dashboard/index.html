@@ -196,7 +196,10 @@
       <div class="card">
         <h2>数据库运行记录 · <span id="logHint" style="font-weight:400">balance_log</span></h2>
         <div id="syncLogWrap"></div>
-        <h2 style="margin-top:1rem">应用日志（app.log）</h2>
+        <h2 style="margin-top:1rem">应用日志（app.log）
+          <button id="clearLogBtn" style="float:right;font-size:0.85rem;padding:0.3rem 0.7rem">清空日志</button>
+          <button id="mqttRepublishBtn" style="float:right;font-size:0.85rem;padding:0.3rem 0.7rem;margin-right:0.5rem">立即推送 MQTT</button>
+        </h2>
         <div class="log-box" id="logBox"></div>
       </div>
     </div>
@@ -526,6 +529,22 @@
     $("fetchBtn").addEventListener("click", async () => {
       if (!confirm("确定立即同步？国网有登录频率限制，请勿频繁操作。")) return;
       try { await api("/api/fetch", { method: "POST" }); alert("已启动同步，请查看运行日志"); switchTab("logs"); await refreshAll(); }
+      catch (e) { alert(e.message); }
+    });
+    $("clearLogBtn").addEventListener("click", async () => {
+      if (!confirm("确定清空日志文件？此操作不可恢复。")) return;
+      try {
+        await api("/api/logs/clear", { method: "POST" });
+        alert("日志已清空");
+        await refreshAll();
+      }
+      catch (e) { alert(e.message); }
+    });
+    $("mqttRepublishBtn").addEventListener("click", async () => {
+      try {
+        await api("/api/mqtt/republish", { method: "POST" });
+        alert("MQTT 数据已重新发布");
+      }
       catch (e) { alert(e.message); }
     });
 
