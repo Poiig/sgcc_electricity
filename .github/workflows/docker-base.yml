@@ -45,8 +45,12 @@ jobs:
           DATE_TAG="base-$(date +%Y%m%d)"
           BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 
+          # 计算 requirements.txt 的 hash
+          REQUIREMENTS_HASH=$(sha256sum requirements.txt | awk '{print $1}' | cut -c1-12)
+
           echo "base_tag=${DATE_TAG}" >> "$GITHUB_OUTPUT"
           echo "build_date=${BUILD_DATE}" >> "$GITHUB_OUTPUT"
+          echo "requirements_hash=${REQUIREMENTS_HASH}" >> "$GITHUB_OUTPUT"
 
           # 强制重建
           if [ "${{ inputs.force_rebuild }}" = "true" ]; then
@@ -57,22 +61,37 @@ jobs:
 
           # 尝试拉取现有镜像检查标签
           if docker pull "${BASE_IMAGE}" 2>/dev/null; then
-            BUILD_DATE=$(docker inspect "${BASE_IMAGE}" --format='{{index .Config.Labels "build.date"}}' 2>/dev/null || echo "")
+            BUILD_DATE_LABEL=$(docker inspect "${BASE_IMAGE}" --format='{{index .Config.Labels "build.date"}}' 2>/dev/null || echo "")
+            REQUIREMENTS_HASH_LABEL=$(docker inspect "${BASE_IMAGE}" --format='{{index .Config.Labels "requirements.hash"}}' 2>/dev/null || echo "")
 
-            if [ -n "$BUILD_DATE" ]; then
-              BUILD_TIMESTAMP=$(date -d "$BUILD_DATE" +%s 2>/dev/null || echo "0")
+            echo "📦 当前基础镜像信息:"
+            echo "   构建日期: ${BUILD_DATE_LABEL:-未知}"
+            echo "   依赖哈希: ${REQUIREMENTS_HASH_LABEL:-未知}"
+            echo ""
+            echo "🆕 本次构建信息:"
+            echo "   依赖哈希: ${REQUIREMENTS_HASH}"
+
+            # 检查 requirements.txt 是否变化
+            if [ "${REQUIREMENTS_HASH}" != "${REQUIREMENTS_HASH_LABEL}" ]; then
+              echo "should_build=true" >> "$GITHUB_OUTPUT"
+              echo "⚠️  requirements.txt 已变化，需要重新构建基础镜像"
+              exit 0
+            fi
+
+            # 检查镜像年龄
+            if [ -n "$BUILD_DATE_LABEL" ]; then
+              BUILD_TIMESTAMP=$(date -d "$BUILD_DATE_LABEL" +%s 2>/dev/null || echo "0")
               CURRENT_TIMESTAMP=$(date +%s)
               AGE_DAYS=$(( (CURRENT_TIMESTAMP - BUILD_TIMESTAMP) / 86400 ))
 
-              echo "📅 基础镜像构建日期: $BUILD_DATE"
-              echo "⏰ 已存在天数: ${AGE_DAYS} 天"
+              echo "⏰ 基础镜像已存在 ${AGE_DAYS} 天"
 
               if [ "$AGE_DAYS" -gt 30 ]; then
                 echo "should_build=true" >> "$GITHUB_OUTPUT"
                 echo "⚠️  基础镜像超过 30 天，需要重新构建"
               else
                 echo "should_build=false" >> "$GITHUB_OUTPUT"
-                echo "✅ 基础镜像仍在有效期内（${AGE_DAYS}/30 天），跳过构建"
+                echo "✅ 基础镜像在有效期内（${AGE_DAYS}/30 天），跳过构建"
               fi
             else
               echo "should_build=true" >> "$GITHUB_OUTPUT"
@@ -110,6 +129,7 @@ jobs:
             ghcr.io/${{ steps.repo.outputs.repo_lower }}:${{ steps.check.outputs.base_tag }}
           build-args: |
             BUILD_DATE=${{ steps.check.outputs.build_date }}
+            REQUIREMENTS_HASH=${{ steps.check.outputs.requirements_hash }}
           cache-from: type=gha,scope=base
           cache-to: type=gha,mode=max,scope=base
 
@@ -122,6 +142,10 @@ jobs:
             echo "" >> "$GITHUB_STEP_SUMMARY"
             echo "- \`ghcr.io/${{ steps.repo.outputs.repo_lower }}:base\`" >> "$GITHUB_STEP_SUMMARY"
             echo "- \`ghcr.io/${{ steps.repo.outputs.repo_lower }}:${{ steps.check.outputs.base_tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "**镜像信息：**" >> "$GITHUB_STEP_SUMMARY"
+            echo "- 构建日期: \`${{ steps.check.outputs.build_date }}\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- 依赖哈希: \`${{ steps.check.outputs.requirements_hash }}\`" >> "$GITHUB_STEP_SUMMARY"
           else
             echo "⏭️  基础镜像在有效期内，跳过构建" >> "$GITHUB_STEP_SUMMARY"
           fi

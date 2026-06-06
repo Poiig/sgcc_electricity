@@ -1,17 +1,6 @@
-# 阶段 1：Python 依赖（仅在 requirements.txt 变化时重建）
+# 应用镜像：仅包含代码（变化频繁，单独一层）
 ARG BASE_IMAGE=ghcr.io/poiig/ha_sgcc_electricity:base
-FROM ${BASE_IMAGE} AS pip-deps
-
-COPY requirements.txt /tmp/requirements.txt
-RUN --mount=type=cache,target=/root/.cache/pip \
-    pip install --upgrade pip \
-    && PIP_ROOT_USER_ACTION=ignore pip install \
-    --disable-pip-version-check \
-    -r /tmp/requirements.txt \
-    && rm -rf /tmp/requirements.txt
-
-# 阶段 2：应用代码（变化最频繁，单独一层）
-FROM pip-deps
+FROM ${BASE_IMAGE}
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1

@@ -1,13 +1,16 @@
-# 基础镜像：系统依赖（Chromium + 字体 + 时区）
+# 基础镜像：系统依赖 + Python 依赖
 # 单独构建推送，主 Dockerfile 直接引用，避免每次重新安装
 FROM python:3.12.11-slim-bookworm
 
 LABEL maintainer="poiig"
-LABEL description="Base image for ha_sgcc_electricity with system dependencies"
+LABEL description="Base image for ha_sgcc_electricity with system and Python dependencies"
 
 ARG BUILD_DATE
+ARG REQUIREMENTS_HASH
 LABEL build.date="${BUILD_DATE}"
+LABEL requirements.hash="${REQUIREMENTS_HASH}"
 
+# 安装系统依赖
 ENV DEBIAN_FRONTEND=noninteractive
 RUN apt-get --allow-releaseinfo-change update \
     && apt-get install -y --no-install-recommends \
@@ -17,3 +20,12 @@ RUN apt-get --allow-releaseinfo-change update \
     && dpkg-reconfigure --frontend noninteractive tzdata \
     && rm -rf /var/lib/apt/lists/* /var/log/* /tmp/* \
     && apt-get clean
+
+# 安装 Python 依赖
+COPY requirements.txt /tmp/requirements.txt
+RUN --mount=type=cache,target=/root/.cache/pip \
+    pip install --no-cache-dir \
+    --index-url https://pypi.tuna.tsinghua.edu.cn/simple \
+    --extra-index-url https://pypi.org/simple \
+    -r /tmp/requirements.txt \
+    && rm -rf /tmp/requirements.txt
