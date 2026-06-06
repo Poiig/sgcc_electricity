@@ -1,6 +1,14 @@
 name: Build and Push Docker Image
 
 on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - '.gitignore'
+      - 'setup_git_config.sh'
   workflow_dispatch:
     inputs:
       version:

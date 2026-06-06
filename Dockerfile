@@ -16,8 +16,8 @@ ENV BUILD_DATE=${BUILD_DATE}
 ENV PYTHON_IN_DOCKER='PYTHON_IN_DOCKER'
 
 WORKDIR /app
-COPY scripts/ /app/
+COPY scripts/ /app/scripts/
 
 RUN mkdir -p /data
 
-CMD ["python3", "main.py"]
+CMD ["python3", "scripts/main.py"]
