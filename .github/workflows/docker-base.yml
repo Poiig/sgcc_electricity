@@ -1,0 +1,122 @@
+name: Build Base Image
+
+on:
+  workflow_dispatch:
+    inputs:
+      force_rebuild:
+        description: '强制重建基础镜像（忽略30天检查）'
+        required: false
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      force_rebuild:
+        description: '强制重建基础镜像'
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  check-and-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      should_build: ${{ steps.check.outputs.should_build }}
+      base_tag: ${{ steps.check.outputs.base_tag }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check base image age
+        id: check
+        run: |
+          REPO_LOWER="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+          BASE_IMAGE="ghcr.io/${REPO_LOWER}:base"
+          DATE_TAG="base-$(date +%Y%m%d)"
+          BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+
+          echo "base_tag=${DATE_TAG}" >> "$GITHUB_OUTPUT"
+          echo "build_date=${BUILD_DATE}" >> "$GITHUB_OUTPUT"
+
+          # 强制重建
+          if [ "${{ inputs.force_rebuild }}" = "true" ]; then
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            echo "✅ 强制重建模式，将重新构建基础镜像"
+            exit 0
+          fi
+
+          # 尝试拉取现有镜像检查标签
+          if docker pull "${BASE_IMAGE}" 2>/dev/null; then
+            BUILD_DATE=$(docker inspect "${BASE_IMAGE}" --format='{{index .Config.Labels "build.date"}}' 2>/dev/null || echo "")
+
+            if [ -n "$BUILD_DATE" ]; then
+              BUILD_TIMESTAMP=$(date -d "$BUILD_DATE" +%s 2>/dev/null || echo "0")
+              CURRENT_TIMESTAMP=$(date +%s)
+              AGE_DAYS=$(( (CURRENT_TIMESTAMP - BUILD_TIMESTAMP) / 86400 ))
+
+              echo "📅 基础镜像构建日期: $BUILD_DATE"
+              echo "⏰ 已存在天数: ${AGE_DAYS} 天"
+
+              if [ "$AGE_DAYS" -gt 30 ]; then
+                echo "should_build=true" >> "$GITHUB_OUTPUT"
+                echo "⚠️  基础镜像超过 30 天，需要重新构建"
+              else
+                echo "should_build=false" >> "$GITHUB_OUTPUT"
+                echo "✅ 基础镜像仍在有效期内（${AGE_DAYS}/30 天），跳过构建"
+              fi
+            else
+              echo "should_build=true" >> "$GITHUB_OUTPUT"
+              echo "⚠️  无法获取构建日期标签，将重新构建"
+            fi
+          else
+            echo "should_build=true" >> "$GITHUB_OUTPUT"
+            echo "📦 基础镜像不存在，首次构建"
+          fi
+
+      - name: Set up QEMU
+        if: steps.check.outputs.should_build == 'true'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        if: steps.check.outputs.should_build == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push base image
+        if: steps.check.outputs.should_build == 'true'
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile.base
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}:base
+            ghcr.io/${{ github.repository }}:${{ steps.check.outputs.base_tag }}
+          build-args: |
+            BUILD_DATE=${{ steps.check.outputs.build_date }}
+          cache-from: type=gha,scope=base
+          cache-to: type=gha,mode=max,scope=base
+
+      - name: Summary
+        run: |
+          echo "### 基础镜像构建结果" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ steps.check.outputs.should_build }}" = "true" ]; then
+            REPO_LOWER="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
+            echo "✅ **已构建并推送基础镜像**" >> "$GITHUB_STEP_SUMMARY"
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "- \`ghcr.io/${REPO_LOWER}:base\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- \`ghcr.io/${REPO_LOWER}:${{ steps.check.outputs.base_tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "⏭️  基础镜像在有效期内，跳过构建" >> "$GITHUB_STEP_SUMMARY"
+          fi

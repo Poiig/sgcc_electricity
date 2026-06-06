@@ -1,0 +1,19 @@
+# 基础镜像：系统依赖（Chromium + 字体 + 时区）
+# 单独构建推送，主 Dockerfile 直接引用，避免每次重新安装
+FROM python:3.12.11-slim-bookworm
+
+LABEL maintainer="poiig"
+LABEL description="Base image for ha_sgcc_electricity with system dependencies"
+
+ARG BUILD_DATE
+LABEL build.date="${BUILD_DATE}"
+
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get --allow-releaseinfo-change update \
+    && apt-get install -y --no-install-recommends \
+        jq chromium chromium-driver fonts-noto-cjk tzdata \
+    && ln -snf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
+    && echo "Asia/Shanghai" > /etc/timezone \
+    && dpkg-reconfigure --frontend noninteractive tzdata \
+    && rm -rf /var/lib/apt/lists/* /var/log/* /tmp/* \
+    && apt-get clean

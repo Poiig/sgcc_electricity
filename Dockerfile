@@ -1,18 +1,6 @@
-# 阶段 1：系统依赖（变化最少，缓存命中率最高）
-FROM python:3.12.11-slim-bookworm AS system-deps
-
-ENV DEBIAN_FRONTEND=noninteractive
-RUN apt-get --allow-releaseinfo-change update \
-    && apt-get install -y --no-install-recommends \
-        jq chromium chromium-driver fonts-noto-cjk tzdata \
-    && ln -snf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime \
-    && echo "Asia/Shanghai" > /etc/timezone \
-    && dpkg-reconfigure --frontend noninteractive tzdata \
-    && rm -rf /var/lib/apt/lists/* /var/log/* /tmp/* \
-    && apt-get clean
-
-# 阶段 2：Python 依赖（仅在 requirements.txt 变化时重建）
-FROM system-deps AS pip-deps
+# 阶段 1：Python 依赖（仅在 requirements.txt 变化时重建）
+ARG BASE_IMAGE=ghcr.io/poiig/ha_sgcc_electricity:base
+FROM ${BASE_IMAGE} AS pip-deps
 
 COPY requirements.txt /tmp/requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
@@ -22,7 +10,7 @@ RUN --mount=type=cache,target=/root/.cache/pip \
     -r /tmp/requirements.txt \
     && rm -rf /tmp/requirements.txt
 
-# 阶段 3：应用代码（变化最频繁，单独一层）
+# 阶段 2：应用代码（变化最频繁，单独一层）
 FROM pip-deps
 
 ENV PYTHONDONTWRITEBYTECODE=1

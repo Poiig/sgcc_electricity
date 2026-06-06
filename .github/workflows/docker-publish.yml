@@ -8,9 +8,23 @@ on:
         required: false
         type: string
         default: ''
+      force_rebuild_base:
+        description: '强制重建基础镜像（忽略30天检查）'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
+  check-base-image:
+    uses: ./.github/workflows/docker-base.yml
+    permissions:
+      contents: read
+      packages: write
+    with:
+      force_rebuild: ${{ inputs.force_rebuild_base }}
+
   build-and-push:
+    needs: check-base-image
     runs-on: ubuntu-latest
     permissions:
       contents: read
