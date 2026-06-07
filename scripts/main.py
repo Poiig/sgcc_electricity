@@ -150,12 +150,15 @@ def logger_init(level: str):
     sh.setFormatter(fmt)
     logger.addHandler(sh)
     try:
-        from logging.handlers import RotatingFileHandler
+        from logging.handlers import TimedRotatingFileHandler
         log_dir = get_data_dir()
         os.makedirs(log_dir, exist_ok=True)
         log_file = os.path.join(log_dir, "app.log")
-        # 使用 RotatingFileHandler，最大 10MB，保留 3 个备份文件
-        fh = RotatingFileHandler(log_file, maxBytes=10*1024*1024, backupCount=3, encoding="utf-8")
+        # 按天轮转，保留 30 天，轮转后文件名格式 app.log.2026-06-07
+        fh = TimedRotatingFileHandler(
+            log_file, when="midnight", interval=1, backupCount=30, encoding="utf-8"
+        )
+        fh.suffix = "%Y-%m-%d"
         fh.setFormatter(fmt)
         logger.addHandler(fh)
     except Exception as exc:

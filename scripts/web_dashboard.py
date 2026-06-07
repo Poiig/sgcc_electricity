@@ -262,13 +262,15 @@ def _register_routes(router: APIRouter) -> None:
 
     @router.post("/api/logs/clear", dependencies=[Depends(require_auth)])
     def api_logs_clear():
-        """清除应用日志文件。"""
+        """清除应用日志文件内容（不删除文件，保留文件句柄有效）。"""
         try:
             from const import get_data_dir
             log_file = Path(get_data_dir()) / "app.log"
             if log_file.exists():
-                log_file.unlink()
-                logger.info("日志文件已清除")
+                # 截断文件内容而非删除，避免 Rotating/TimedRotatingFileHandler 句柄失效
+                with open(log_file, "w", encoding="utf-8") as f:
+                    f.truncate(0)
+                logger.info("日志已清除")
                 return {"ok": True, "message": "日志已清除"}
             else:
                 return {"ok": True, "message": "日志文件不存在"}
