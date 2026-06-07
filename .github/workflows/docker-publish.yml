@@ -45,7 +45,6 @@ jobs:
       - name: Prepare variables
         id: vars
         run: |
-          # 镜像名必须小写
           REPO_LOWER="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
           echo "repo_lower=${REPO_LOWER}" >> "$GITHUB_OUTPUT"
 
@@ -61,26 +60,17 @@ jobs:
           echo "本次版本: ${TAG}"
           echo "构建时间: ${BUILD_DATE}"
 
-      - name: Check Docker Hub secrets
-        id: dockerhub
-        env:
-          DH_USER: ${{ secrets.DOCKERHUB_USERNAME }}
-          DH_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-        run: |
-          if [ -n "$DH_USER" ] && [ -n "$DH_TOKEN" ]; then
-            echo "enabled=true" >> "$GITHUB_OUTPUT"
-            echo "image=docker.io/${DH_USER}/ha_sgcc_electricity" >> "$GITHUB_OUTPUT"
-            echo "Docker Hub 已配置，将同时推送"
-          else
-            echo "enabled=false" >> "$GITHUB_OUTPUT"
-            echo "Docker Hub 未配置，仅推送 GHCR"
-          fi
-
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub（拉取基础镜像）
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -88,13 +78,6 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Log in to Docker Hub
-        if: steps.dockerhub.outputs.enabled == 'true'
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push to GHCR
         uses: docker/build-push-action@v5
@@ -113,7 +96,6 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build and push to Docker Hub
-        if: steps.dockerhub.outputs.enabled == 'true'
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -121,8 +103,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ${{ steps.dockerhub.outputs.image }}:latest
-            ${{ steps.dockerhub.outputs.image }}:${{ steps.vars.outputs.tag }}
+            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/ha_sgcc_electricity:latest
+            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/ha_sgcc_electricity:${{ steps.vars.outputs.tag }}
           build-args: |
             VERSION=${{ steps.vars.outputs.tag }}
             BUILD_DATE=${{ steps.vars.outputs.build_date }}
@@ -130,7 +112,6 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Update Docker Hub description
-        if: steps.dockerhub.outputs.enabled == 'true'
         uses: peter-evans/dockerhub-description@v4
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -149,13 +130,13 @@ jobs:
 
       - name: Summary
         run: |
+          DH_USER="${{ secrets.DOCKERHUB_USERNAME }}"
           echo "### Docker 镜像发布成功" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| 注册表 | latest | 版本 |" >> "$GITHUB_STEP_SUMMARY"
           echo "|--------|--------|------|" >> "$GITHUB_STEP_SUMMARY"
           echo "| GHCR | \`ghcr.io/${{ steps.vars.outputs.repo_lower }}:latest\` | \`ghcr.io/${{ steps.vars.outputs.repo_lower }}:${{ steps.vars.outputs.tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
-          if [ "${{ steps.dockerhub.outputs.enabled }}" = "true" ]; then
-            echo "| Docker Hub | \`${{ steps.dockerhub.outputs.image }}:latest\` | \`${{ steps.dockerhub.outputs.image }}:${{ steps.vars.outputs.tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
-          fi
+          echo "| Docker Hub | \`docker.io/${DH_USER}/ha_sgcc_electricity:latest\` | \`docker.io/${DH_USER}/ha_sgcc_electricity:${{ steps.vars.outputs.tag }}\` |" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "基础镜像: \`docker.io/${DH_USER}/ha_sgcc_electricity:base\`" >> "$GITHUB_STEP_SUMMARY"
           echo "GHCR 已配置保留最近 10 个版本，旧版本自动清理" >> "$GITHUB_STEP_SUMMARY"

@@ -30,18 +30,17 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Log in to GitHub Container Registry
+      - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Check base image age
         id: check
         run: |
-          REPO_LOWER="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
-          BASE_IMAGE="ghcr.io/${REPO_LOWER}:base"
+          DH_USER="${{ secrets.DOCKERHUB_USERNAME }}"
+          BASE_IMAGE="docker.io/${DH_USER}/ha_sgcc_electricity:base"
           DATE_TAG="base-$(date +%Y%m%d)"
           BUILD_DATE="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 
@@ -51,11 +50,12 @@ jobs:
           echo "base_tag=${DATE_TAG}" >> "$GITHUB_OUTPUT"
           echo "build_date=${BUILD_DATE}" >> "$GITHUB_OUTPUT"
           echo "requirements_hash=${REQUIREMENTS_HASH}" >> "$GITHUB_OUTPUT"
+          echo "base_image=${BASE_IMAGE}" >> "$GITHUB_OUTPUT"
 
           # 强制重建
           if [ "${{ inputs.force_rebuild }}" = "true" ]; then
             echo "should_build=true" >> "$GITHUB_OUTPUT"
-            echo "✅ 强制重建模式，将重新构建基础镜像"
+            echo "强制重建模式，将重新构建基础镜像"
             exit 0
           fi
 
@@ -64,17 +64,17 @@ jobs:
             BUILD_DATE_LABEL=$(docker inspect "${BASE_IMAGE}" --format='{{index .Config.Labels "build.date"}}' 2>/dev/null || echo "")
             REQUIREMENTS_HASH_LABEL=$(docker inspect "${BASE_IMAGE}" --format='{{index .Config.Labels "requirements.hash"}}' 2>/dev/null || echo "")
 
-            echo "📦 当前基础镜像信息:"
+            echo "当前基础镜像信息:"
             echo "   构建日期: ${BUILD_DATE_LABEL:-未知}"
             echo "   依赖哈希: ${REQUIREMENTS_HASH_LABEL:-未知}"
             echo ""
-            echo "🆕 本次构建信息:"
+            echo "本次构建信息:"
             echo "   依赖哈希: ${REQUIREMENTS_HASH}"
 
             # 检查 requirements.txt 是否变化
             if [ "${REQUIREMENTS_HASH}" != "${REQUIREMENTS_HASH_LABEL}" ]; then
               echo "should_build=true" >> "$GITHUB_OUTPUT"
-              echo "⚠️  requirements.txt 已变化，需要重新构建基础镜像"
+              echo "requirements.txt 已变化，需要重新构建基础镜像"
               exit 0
             fi
 
@@ -84,29 +84,23 @@ jobs:
               CURRENT_TIMESTAMP=$(date +%s)
               AGE_DAYS=$(( (CURRENT_TIMESTAMP - BUILD_TIMESTAMP) / 86400 ))
 
-              echo "⏰ 基础镜像已存在 ${AGE_DAYS} 天"
+              echo "基础镜像已存在 ${AGE_DAYS} 天"
 
               if [ "$AGE_DAYS" -gt 30 ]; then
                 echo "should_build=true" >> "$GITHUB_OUTPUT"
-                echo "⚠️  基础镜像超过 30 天，需要重新构建"
+                echo "基础镜像超过 30 天，需要重新构建"
               else
                 echo "should_build=false" >> "$GITHUB_OUTPUT"
-                echo "✅ 基础镜像在有效期内（${AGE_DAYS}/30 天），跳过构建"
+                echo "基础镜像在有效期内（${AGE_DAYS}/30 天），跳过构建"
               fi
             else
               echo "should_build=true" >> "$GITHUB_OUTPUT"
-              echo "⚠️  无法获取构建日期标签，将重新构建"
+              echo "无法获取构建日期标签，将重新构建"
             fi
           else
             echo "should_build=true" >> "$GITHUB_OUTPUT"
-            echo "📦 基础镜像不存在，首次构建"
+            echo "基础镜像不存在，首次构建"
           fi
-
-      - name: Prepare repository name
-        id: repo
-        run: |
-          REPO_LOWER="$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')"
-          echo "repo_lower=${REPO_LOWER}" >> "$GITHUB_OUTPUT"
 
       - name: Set up QEMU
         if: steps.check.outputs.should_build == 'true'
@@ -116,7 +110,7 @@ jobs:
         if: steps.check.outputs.should_build == 'true'
         uses: docker/setup-buildx-action@v3
 
-      - name: Build and push base image
+      - name: Build and push base image to Docker Hub
         if: steps.check.outputs.should_build == 'true'
         uses: docker/build-push-action@v5
         with:
@@ -125,8 +119,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           push: true
           tags: |
-            ghcr.io/${{ steps.repo.outputs.repo_lower }}:base
-            ghcr.io/${{ steps.repo.outputs.repo_lower }}:${{ steps.check.outputs.base_tag }}
+            ${{ steps.check.outputs.base_image }}
+            docker.io/${{ secrets.DOCKERHUB_USERNAME }}/ha_sgcc_electricity:${{ steps.check.outputs.base_tag }}
           build-args: |
             BUILD_DATE=${{ steps.check.outputs.build_date }}
             REQUIREMENTS_HASH=${{ steps.check.outputs.requirements_hash }}
@@ -137,15 +131,16 @@ jobs:
         run: |
           echo "### 基础镜像构建结果" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
+          DH_USER="${{ secrets.DOCKERHUB_USERNAME }}"
           if [ "${{ steps.check.outputs.should_build }}" = "true" ]; then
-            echo "✅ **已构建并推送基础镜像**" >> "$GITHUB_STEP_SUMMARY"
+            echo "**已构建并推送基础镜像到 Docker Hub**" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
-            echo "- \`ghcr.io/${{ steps.repo.outputs.repo_lower }}:base\`" >> "$GITHUB_STEP_SUMMARY"
-            echo "- \`ghcr.io/${{ steps.repo.outputs.repo_lower }}:${{ steps.check.outputs.base_tag }}\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- \`docker.io/${DH_USER}/ha_sgcc_electricity:base\`" >> "$GITHUB_STEP_SUMMARY"
+            echo "- \`docker.io/${DH_USER}/ha_sgcc_electricity:${{ steps.check.outputs.base_tag }}\`" >> "$GITHUB_STEP_SUMMARY"
             echo "" >> "$GITHUB_STEP_SUMMARY"
             echo "**镜像信息：**" >> "$GITHUB_STEP_SUMMARY"
             echo "- 构建日期: \`${{ steps.check.outputs.build_date }}\`" >> "$GITHUB_STEP_SUMMARY"
             echo "- 依赖哈希: \`${{ steps.check.outputs.requirements_hash }}\`" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "⏭️  基础镜像在有效期内，跳过构建" >> "$GITHUB_STEP_SUMMARY"
+            echo "基础镜像在有效期内，跳过构建" >> "$GITHUB_STEP_SUMMARY"
           fi

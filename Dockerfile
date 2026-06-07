@@ -1,5 +1,6 @@
 # 应用镜像：仅包含代码（变化频繁，单独一层）
-ARG BASE_IMAGE=ghcr.io/poiig/ha_sgcc_electricity:base
+# 基础镜像从 Docker Hub 拉取
+ARG BASE_IMAGE=docker.io/poiig/ha_sgcc_electricity:base
 FROM ${BASE_IMAGE}
 
 ENV PYTHONDONTWRITEBYTECODE=1
