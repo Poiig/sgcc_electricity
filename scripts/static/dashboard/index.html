@@ -356,17 +356,20 @@
       const touText = tou.valley != null ? `谷 ${fmtNum(tou.valley)} / 峰 ${fmtNum(tou.peak)} kWh` : "—";
       const billLabel = s.bill_month ? `(${s.bill_month})` : "";
       const billCharge = s.month_charge != null ? fmtNum(s.month_charge, "元") : "电费待出账";
-      const yearlySub = s.yearly_label ? `(${s.yearly_label}) ${fmtNum(s.yearly_charge, "元")}` : fmtNum(s.yearly_charge, "元");
+      const yearlyLabel = s.yearly_label ? `${s.yearly_label} 年度` : "年度";
+      const balanceLabel = s.balance_as_of ? `余额 (${s.balance_as_of.slice(0, 10)})` : "余额";
+      const usageLabel = s.last_daily_date ? `最近用电 (${s.last_daily_date})` : "最近用电";
+      const touLabel = tou.month ? `当月分时 (${tou.month})` : "当月分时";
       const items = [
-        ["余额", fmtNum(s.balance, "元"), s.balance_as_of ? `(${s.balance_as_of.slice(0, 10)})` : ""],
-        ["最近用电", fmtNum(s.last_daily_usage, "kWh"), s.last_daily_date || ""],
+        [balanceLabel, fmtNum(s.balance, "元"), ""],
+        [usageLabel, fmtNum(s.last_daily_usage, "kWh"), ""],
         [`上月账单${billLabel}`, `${fmtNum(s.month_usage, "kWh")} / ${billCharge}`, ""],
-        ["年度", `${fmtNum(s.yearly_usage, "kWh")} / ${yearlySub}`, ""],
-        ["当月分时", touText, tou.month || ""],
+        [yearlyLabel, `${fmtNum(s.yearly_usage, "kWh")} / ${fmtNum(s.yearly_charge, "元")}`, ""],
+        [touLabel, touText, ""],
         ["应交金额", s.amount_due != null && Number(s.amount_due) === 0 ? '<strong style="color:var(--accent2)">已交清</strong>' : fmtNum(s.amount_due, "元"), ""],
       ];
       $("statsGrid").innerHTML = items.map(([l, v, sub]) =>
-        `<div class="stat"><div class="label">${l}</div><div class="value">${v}<br><small>${sub}</small></div></div>`
+        `<div class="stat"><div class="label">${l}</div><div class="value">${v}${sub ? `<br><small>${sub}</small>` : ""}</div></div>`
       ).join("");
       $("userTitle").textContent = `${s.user_name || s.user_id} (${s.user_id})`;
       renderStepCard(s);
@@ -418,8 +421,8 @@
       monthlyChart = upsertChart(monthlyChart, $("monthlyChart"), {
         type: "bar",
         data: { labels: data.map(d => d.month), datasets: [
-          { type: "bar", label: "用电量 kWh", data: data.map(d => d.total_usage), backgroundColor: "rgba(59,130,246,0.7)", order: 2 },
-          { type: "line", label: "电费 元", data: data.map(d => d.total_charge), borderColor: "#10b981", backgroundColor: "rgba(16,185,129,0.12)", tension: 0.3, fill: false, order: 1, pointRadius: 4, pointBackgroundColor: "#10b981", yAxisID: "y1" },
+          { type: "bar", label: "用电量 kWh", data: data.map(d => d.total_usage), backgroundColor: "rgba(59,130,246,0.55)", borderColor: "rgba(59,130,246,0.8)", borderWidth: 1, borderRadius: 6, barPercentage: 0.5, categoryPercentage: 0.7, order: 2 },
+          { type: "line", label: "电费 元", data: data.map(d => d.total_charge), borderColor: "#10b981", backgroundColor: "rgba(16,185,129,0.10)", tension: 0.35, fill: true, order: 1, pointRadius: 4, pointBackgroundColor: "#10b981", pointBorderColor: "#0f1419", pointBorderWidth: 2, yAxisID: "y1" },
         ]},
         options: {
           responsive: true,
@@ -437,8 +440,8 @@
             },
           },
           scales: {
-            x: { ticks: { color: "#8b9cb3" } },
-            y: { position: "left", title: { display: true, text: "用电量 kWh", color: "#8b9cb3" }, ticks: { color: "#8b9cb3" }, grace: "12%" },
+            x: { ticks: { color: "#8b9cb3" }, grid: { color: "rgba(45,58,79,0.3)" } },
+            y: { position: "left", title: { display: true, text: "用电量 kWh", color: "#8b9cb3" }, ticks: { color: "#8b9cb3" }, grid: { color: "rgba(45,58,79,0.3)" }, grace: "12%" },
             y1: { position: "right", title: { display: true, text: "电费 元", color: "#8b9cb3" }, ticks: { color: "#8b9cb3" }, grid: { drawOnChartArea: false }, grace: "12%" },
           },
         },
