@@ -64,41 +64,44 @@ class MQTTDiscoveryClient:
             logging.error("MQTT 客户端初始化失败: %s", e)
 
     def _cleanup_legacy_topics(self):
-        """清除旧版本（entity_id 含 sensor. 前缀）遗留的 discovery retain 消息，避免 HA 解析出拼音实体名。"""
+        """清除旧版本（entity_id 含 sensor. 前缀）遗留的 discovery retain 消息。
+
+        通过订阅 MQTT wildcard topic 动态发现所有旧格式的 config topic，
+        即 homeassistant/sensor/sensor.xxx/config 模式的残留消息，
+        然后发送空 payload 清除 retain。
+        """
         if not self.client or not self.connected:
             return
-        # 旧版本的 config topic 格式为 homeassistant/sensor/sensor.xxx_xxxx/config
-        # 发送空 payload 清除 retain
-        from const import (
-            BALANCE_SENSOR_NAME, DAILY_USAGE_SENSOR_NAME, YEARLY_USAGE_SENSOR_NAME,
-            YEARLY_CHARGE_SENSOR_NAME, MONTH_USAGE_SENSOR_NAME, MONTH_CHARGE_SENSOR_NAME,
-            MONTH_VALLEY_SENSOR_NAME, MONTH_FLAT_SENSOR_NAME, MONTH_PEAK_SENSOR_NAME,
-            MONTH_TIP_SENSOR_NAME, PREPAY_BALANCE_SENSOR_NAME,
-            STEP_USED_STEP1_SENSOR_NAME, STEP_REMAIN_STEP1_SENSOR_NAME,
-            STEP_USED_STEP2_SENSOR_NAME, STEP_REMAIN_STEP2_SENSOR_NAME,
-            STEP_USED_STEP3_SENSOR_NAME, STEP_TOTAL_USAGE_SENSOR_NAME,
-            STEP_STAGE_SENSOR_NAME,
-        )
-        sensor_bases = [
-            BALANCE_SENSOR_NAME, DAILY_USAGE_SENSOR_NAME, YEARLY_USAGE_SENSOR_NAME,
-            YEARLY_CHARGE_SENSOR_NAME, MONTH_USAGE_SENSOR_NAME, MONTH_CHARGE_SENSOR_NAME,
-            MONTH_VALLEY_SENSOR_NAME, MONTH_FLAT_SENSOR_NAME, MONTH_PEAK_SENSOR_NAME,
-            MONTH_TIP_SENSOR_NAME, PREPAY_BALANCE_SENSOR_NAME,
-            STEP_USED_STEP1_SENSOR_NAME, STEP_REMAIN_STEP1_SENSOR_NAME,
-            STEP_USED_STEP2_SENSOR_NAME, STEP_REMAIN_STEP2_SENSOR_NAME,
-            STEP_USED_STEP3_SENSOR_NAME, STEP_TOTAL_USAGE_SENSOR_NAME,
-            STEP_STAGE_SENSOR_NAME,
-        ]
+
+        legacy_topics = []
+
+        def _on_legacy_message(client, userdata, msg):
+            if msg.payload:
+                topic = msg.topic
+                # 只收集旧格式 topic（第三段以 sensor. 开头）
+                parts = topic.split("/")
+                if len(parts) == 4 and parts[2].startswith("sensor."):
+                    legacy_topics.append(topic)
+
+        # 使用 MQTT 单级通配符 + 匹配第三段
+        wildcard = f"{self.mqtt_topic_prefix}/sensor/+/config"
+        self.client.subscribe(wildcard)
+        self.client.message_callback_add(wildcard, _on_legacy_message)
+
+        # 等待 retain 消息到达
+        time.sleep(3)
+
+        # 取消订阅和回调
+        self.client.unsubscribe(wildcard)
+        self.client.message_callback_remove(wildcard)
+
         cleaned = 0
-        for base in sensor_bases:
-            object_id = base.replace("sensor.", "")
-            # 旧版本错误地把 entity_id（含 sensor.）直接拼入 topic
-            legacy_topic = f"{self.mqtt_topic_prefix}/sensor/sensor.{object_id}/config"
-            self.client.publish(legacy_topic, "", retain=True)
-            legacy_state = f"{self.mqtt_topic_prefix}/sensor/sensor.{object_id}/state"
-            self.client.publish(legacy_state, "", retain=True)
-            legacy_attrs = f"{self.mqtt_topic_prefix}/sensor/sensor.{object_id}/attributes"
-            self.client.publish(legacy_attrs, "", retain=True)
+        for topic in legacy_topics:
+            # 清除 config / state / attributes 三类 topic
+            base_topic = topic[:-len("/config")]
+            self.client.publish(topic, "", retain=True)
+            self.client.publish(f"{base_topic}/state", "", retain=True)
+            self.client.publish(f"{base_topic}/attributes", "", retain=True)
             cleaned += 1
         if cleaned:
             logging.info("已清除 %d 组旧版 MQTT Discovery retain 消息", cleaned)
@@ -142,12 +145,17 @@ class MQTTDiscoveryClient:
         icon: str = None,
         attributes: dict = None,
     ) -> dict:
-        """生成传感器配置消息（HA MQTT Discovery 格式）。"""
+        """生成传感器配置消息（HA MQTT Discovery 格式）。
+
+        同时设置 object_id（兼容 HA <= 2025.10）和 default_entity_id（HA >= 2025.10），
+        确保所有 HA 版本都能正确生成英文 entity_id，而不是从中文 name 拼音化。
+        """
         object_id = entity_id.replace("sensor.", "")
         config = {
             "name": name,
-            "unique_id": entity_id,  # 使用完整的 entity_id 作为 unique_id
-            "object_id": object_id,  # 去掉 sensor. 前缀的 object_id
+            "unique_id": entity_id,
+            "object_id": object_id,
+            "default_entity_id": entity_id,
             "state_topic": f"{self.mqtt_topic_prefix}/sensor/{object_id}/state",
             "device": self._get_device_info(user_id, user_name),
         }
