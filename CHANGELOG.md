@@ -2,6 +2,40 @@
 
 格式基于 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.0.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [2.1.1] - 2026-06-15
+
+### 新增
+
+- **Web 控制台 UI 大幅升级**：参考国网 APP 风格全面优化交互体验
+  - **Toast 通知系统**：右上角浮层提示替代所有原生 `alert()`，支持成功/错误/警告/信息四类，自动消失可手动关闭
+  - **自定义确认对话框**：暗色毛玻璃 Modal 替代原生 `confirm()`，支持 ESC/点遮罩取消、危险操作红色按钮
+  - **同步按钮 loading + 冷却倒计时**：同步中按钮显示 spinner；冷却期按钮显示 `冷却 M:SS` 实时倒计时（用上后端 `cooldown_remaining_sec`）
+  - **数据卡片色彩语义化**：余额 <0 红、<30 橙、≥30 绿；应交金额 0 显示绿色"已交清"，>0 红色警示；卡片左侧加色彩强调条
+  - **SVG 图标**：每张数据卡片、Toast、Banner、tab 都加了对应含义的线性图标
+  - **阶梯用电进度条**：三段堆叠进度条（一阶/二阶/三阶），直观显示当前所处阶梯位置
+  - **环比变化提示**：最近日用电、上月账单显示 `↑X.X% 环比`，红色表示上升、绿色表示下降
+  - **图表 datalabel 智能隐藏**：窄屏或数据点多时只显示极值，避免拥挤；tooltip 改为暗色卡片样式
+  - **骨架屏 + 错误重试**：加载户号数据时显示 shimmer 占位；网络失败显示错误信息 + 重试按钮
+  - **相对时间显示**：状态栏"上次同步"显示 `X 小时前`，更直观
+  - **PWA 支持**：manifest + theme-color，可"添加到主屏幕"像 APP 一样使用
+  - **快捷键**：`R` 刷新、`S` 立即同步、`1/2/3` 切换 tab
+  - **头部品牌区**：header 增加闪电 logo + 阴影
+  - **自定义滚动条 + 文本选中色**
+
+### 优化
+
+- **移动端响应式**：断点提升至 720px，窄屏下按钮文字隐藏只留图标、tab 也图标化、卡片单列、字体自适应；≤400px 超窄屏 toolbar 改纵向布局
+- **登录页**：登录中按钮显示 spinner 防止重复点击
+- **状态指示**：同步中状态 pill 加呼吸点动画，更直观
+- **按钮交互**：增加按压反馈、hover 高亮、聚焦轮廓
+- **卡片 hover**：鼠标悬停加蓝色边框 + 微阴影
+
+### 修复
+
+- **同步按钮文字节点 bug**：修复 spinner 写入后破坏文字 span 导致后续状态显示错乱的问题
+
+---
+
 ## [2.1.0] - 2026-06-11
 
 ### 新增
@@ -77,5 +111,6 @@
 
 见 [GitHub Releases](https://github.com/Poiig/sgcc_electricity/releases) 历史版本（上游 ARC-MX 镜像 tag：`v1.4.0` ~ `v1.7.3`）。
 
+[2.1.1]: https://github.com/Poiig/sgcc_electricity/releases/tag/v2.1.1
 [2.1.0]: https://github.com/Poiig/sgcc_electricity/releases/tag/v2.1.0
 [2.0.0]: https://github.com/Poiig/sgcc_electricity/releases/tag/v2.0.0

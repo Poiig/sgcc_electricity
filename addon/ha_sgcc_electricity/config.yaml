@@ -1,6 +1,6 @@
 name: "国家电网电费数据获取"
 description: "将国家电网 95598 电费、用电量、分时电量数据同步到 Home Assistant（支持 REST API 和 MQTT Discovery）"
-version: "2.0.0"
+version: "2.1.1"
 slug: "ha_sgcc_electricity"
 url: "https://github.com/Poiig/sgcc_electricity"
 arch:
