@@ -1,263 +1,1268 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>国家电网数据同步控制台</title>
-  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg viewBox='0 0 72 72' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cdefs%3E%3ClinearGradient id='bg' x1='0' y1='0' x2='72' y2='72' gradientUnits='userSpaceOnUse'%3E%3Cstop stop-color='%231e3a5f'/%3E%3Cstop offset='1' stop-color='%230f172a'/%3E%3C/linearGradient%3E%3ClinearGradient id='bl' x1='36' y1='12' x2='36' y2='60' gradientUnits='userSpaceOnUse'%3E%3Cstop stop-color='%23fbbf24'/%3E%3Cstop offset='1' stop-color='%23f59e0b'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect x='4' y='4' width='64' height='64' rx='16' fill='url(%23bg)' stroke='rgba(59,130,246,0.5)' stroke-width='1.5'/%3E%3Cpath d='M38 18 L28 38 H34 L32 54 L44 32 H38 Z' fill='url(%23bl)' stroke='%23fef3c7' stroke-width='0.5' stroke-linejoin='round'/%3E%3C/svg%3E" />
-  <meta name="theme-color" content="#0f1419" />
+  <title>电网数据同步控制台</title>
+  <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+  <link rel="apple-touch-icon" href="./sgcc-logo.svg" />
+  <meta name="theme-color" content="#0f1419" id="themeColorMeta" />
+  <script>
+    /* 首屏防闪烁：在 CSS 渲染前应用已保存的主题偏好 */
+    (function () {
+      var mode = localStorage.getItem("dashboard_theme") || "system";
+      var resolved = mode === "system"
+        ? (window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+        : mode;
+      document.documentElement.setAttribute("data-theme", resolved);
+      document.documentElement.setAttribute("data-theme-mode", mode);
+      var meta = document.getElementById("themeColorMeta");
+      if (meta) meta.content = resolved === "dark" ? "#0f1419" : "#f0f2f5";
+    })();
+  </script>
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="国电网数据" />
-  <link rel="manifest" href="data:application/manifest+json,%7B%22name%22%3A%22%E5%9B%BD%E5%AE%B6%E7%94%B5%E7%BD%91%E6%95%B0%E6%8D%AE%E6%8E%A7%E5%88%B6%E5%8F%B0%22%2C%22short_name%22%3A%22%E7%94%B5%E8%B4%B9%E7%9B%91%E6%8E%A7%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230f1419%22%2C%22theme_color%22%3A%22%230f1419%22%2C%22start_url%22%3A%22.%2F%22%7D" />
+  <link rel="manifest"
+    href="data:application/manifest+json,%7B%22name%22%3A%22%E5%9B%BD%E5%AE%B6%E7%94%B5%E7%BD%91%E6%95%B0%E6%8D%AE%E6%8E%A7%E5%88%B6%E5%8F%B0%22%2C%22short_name%22%3A%22%E7%94%B5%E8%B4%B9%E7%9B%91%E6%8E%A7%22%2C%22display%22%3A%22standalone%22%2C%22background_color%22%3A%22%230f1419%22%2C%22theme_color%22%3A%22%230f1419%22%2C%22start_url%22%3A%22.%2F%22%7D" />
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
   <style>
-    :root {
-      --bg: #0f1419; --card: #1a2332; --border: #2d3a4f; --text: #e7ecf3;
-      --muted: #8b9cb3; --accent: #3b82f6; --accent2: #10b981; --warn: #f59e0b; --danger: #ef4444;
-      --info: #60a5fa; --danger-bg: #450a0a; --success-bg: #064e3b; --warn-bg: #422006;
+    :root,
+    [data-theme="dark"] {
+      --bg: #0f1419;
+      --card: #1a2332;
+      --border: #2d3a4f;
+      --text: #e7ecf3;
+      --muted: #8b9cb3;
+      --accent: #3b82f6;
+      --accent2: #10b981;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --info: #60a5fa;
+      --danger-bg: #450a0a;
+      --success-bg: #064e3b;
+      --warn-bg: #422006;
+      --stat-bg: #121a26;
+      --surface-deep: #0a0e14;
+      --header-grad: #152030;
+      --log-text: #b8c5d6;
+      --pill-bg: #243044;
+      --step-badge-bg: #1e3a5f;
+      --step-badge-text: #93c5fd;
+      --banner-warn-bg: #431407;
+      --banner-warn-border: #7c2d12;
+      --banner-warn-text: #fdba74;
+      --banner-info-bg: #172554;
+      --banner-info-border: #1e3a5f;
+      --banner-info-text: #93c5fd;
+      --skeleton-a: #1a2332;
+      --skeleton-b: #2d3a4f;
+      --card-hover-border: rgba(59, 130, 246, 0.35);
+      --card-shadow: rgba(0, 0, 0, 0.2);
+      --modal-overlay: rgba(0, 0, 0, 0.55);
+      --scrollbar: #2d3a4f;
+      --login-bg: linear-gradient(165deg, #0a0e14 0%, #0f1419 40%, #121a26 100%);
+      --login-box-bg: linear-gradient(145deg, rgba(26, 35, 50, 0.95) 0%, rgba(18, 26, 38, 0.98) 100%);
+      --login-input-bg: #0a0e14;
+      --login-title-grad: linear-gradient(135deg, #e7ecf3 0%, #93c5fd 100%);
+      --chart-muted: #8b9cb3;
+      --chart-grid: rgba(45, 58, 79, 0.3);
+      --chart-label: #e7ecf3;
+      --chart-tooltip-bg: rgba(15, 20, 25, 0.95);
+      --chart-tooltip-title: #e7ecf3;
+      --chart-tooltip-body: #b8c5d6;
+      --chart-tooltip-border: #2d3a4f;
+      --chart-point-border: #0f1419;
+      --bar-label: #fff;
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    *::selection { background: rgba(59, 130, 246, 0.35); color: #fff; }
+
+    [data-theme="light"] {
+      --bg: #f0f2f5;
+      --card: #ffffff;
+      --border: #d1d9e6;
+      --text: #1a2332;
+      --muted: #64748b;
+      --accent: #2563eb;
+      --accent2: #059669;
+      --warn: #d97706;
+      --danger: #dc2626;
+      --info: #3b82f6;
+      --danger-bg: #fef2f2;
+      --success-bg: #ecfdf5;
+      --warn-bg: #fffbeb;
+      --stat-bg: #f8fafc;
+      --surface-deep: #eef2f7;
+      --header-grad: #e8edf4;
+      --log-text: #334155;
+      --pill-bg: #e2e8f0;
+      --step-badge-bg: #dbeafe;
+      --step-badge-text: #1d4ed8;
+      --banner-warn-bg: #fff7ed;
+      --banner-warn-border: #fdba74;
+      --banner-warn-text: #c2410c;
+      --banner-info-bg: #eff6ff;
+      --banner-info-border: #93c5fd;
+      --banner-info-text: #1d4ed8;
+      --skeleton-a: #e2e8f0;
+      --skeleton-b: #f1f5f9;
+      --card-hover-border: rgba(37, 99, 235, 0.35);
+      --card-shadow: rgba(15, 23, 42, 0.08);
+      --modal-overlay: rgba(15, 23, 42, 0.35);
+      --scrollbar: #cbd5e1;
+      --login-bg: linear-gradient(165deg, #e8edf4 0%, #f0f2f5 40%, #f8fafc 100%);
+      --login-box-bg: linear-gradient(145deg, #ffffff 0%, #f8fafc 100%);
+      --login-input-bg: #ffffff;
+      --login-title-grad: linear-gradient(135deg, #1e293b 0%, #2563eb 100%);
+      --chart-muted: #64748b;
+      --chart-grid: rgba(148, 163, 184, 0.35);
+      --chart-label: #1e293b;
+      --chart-tooltip-bg: rgba(255, 255, 255, 0.98);
+      --chart-tooltip-title: #1e293b;
+      --chart-tooltip-body: #475569;
+      --chart-tooltip-border: #d1d9e6;
+      --chart-point-border: #ffffff;
+      --bar-label: #fff;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    *::selection {
+      background: rgba(59, 130, 246, 0.35);
+      color: #fff;
+    }
+
     /* 自定义滚动条：暗色主题匹配 */
-    *::-webkit-scrollbar { width: 8px; height: 8px; }
-    *::-webkit-scrollbar-track { background: transparent; }
-    *::-webkit-scrollbar-thumb { background: #2d3a4f; border-radius: 4px; }
-    *::-webkit-scrollbar-thumb:hover { background: #3b82f6; }
-    html { scrollbar-color: #2d3a4f transparent; scrollbar-width: thin; }
-    body { font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; line-height: 1.5; -webkit-tap-highlight-color: transparent; }
-    header { padding: 1rem 1.5rem; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; background: linear-gradient(180deg, #152030 0%, var(--bg) 100%); position: sticky; top: 0; z-index: 20; backdrop-filter: blur(8px); }
-    header h1 { font-size: 1.25rem; font-weight: 600; }
-    header .meta { color: var(--muted); font-size: 0.85rem; }
-    .brand { display: flex; align-items: center; gap: 0.7rem; min-width: 0; }
-    .brand-logo { width: 36px; height: 36px; flex: 0 0 auto; filter: drop-shadow(0 4px 10px rgba(59, 130, 246, 0.3)); }
-    .toolbar { margin-left: auto; display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center; }
-    button, select, input[type="password"], input[type="text"] {
-      background: var(--card); border: 1px solid var(--border); color: var(--text);
-      padding: 0.45rem 0.9rem; border-radius: 8px; cursor: pointer; font-size: 0.9rem;
+    *::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    *::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    *::-webkit-scrollbar-thumb {
+      background: var(--scrollbar);
+      border-radius: 4px;
+    }
+
+    *::-webkit-scrollbar-thumb:hover {
+      background: var(--accent);
+    }
+
+    html {
+      scrollbar-color: var(--scrollbar) transparent;
+      scrollbar-width: thin;
+    }
+
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      line-height: 1.5;
+      -webkit-tap-highlight-color: transparent;
+      transition: background 0.2s, color 0.2s;
+    }
+
+    header {
+      padding: 1rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 1rem;
+      background: linear-gradient(180deg, var(--header-grad) 0%, var(--bg) 100%);
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      backdrop-filter: blur(8px);
+    }
+
+    header h1 {
+      font-size: 1.25rem;
+      font-weight: 600;
+    }
+
+    header .meta {
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 0.7rem;
+      min-width: 0;
+    }
+
+    .brand-logo,
+    .login-logo {
+      object-fit: contain;
+      display: block;
+    }
+
+    .brand-logo {
+      width: 56px;
+      height: 56px;
+      flex: 0 0 auto;
+      filter: drop-shadow(0 4px 10px rgba(0, 102, 102, 0.35));
+    }
+
+    .toolbar {
+      margin-left: auto;
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    #userSelect {
+      min-width: 9.5rem;
+      max-width: 14rem;
+      flex: 0 1 auto;
+    }
+
+    .toolbar-user {
+      flex: 0 0 auto;
+    }
+
+    button,
+    select,
+    input[type="password"],
+    input[type="text"] {
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 0.45rem 0.9rem;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.9rem;
       transition: filter 0.15s, transform 0.05s, opacity 0.2s, border-color 0.2s;
     }
-    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-    button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
-    button:hover:not(:disabled) { filter: brightness(1.08); }
-    button:active:not(:disabled) { transform: scale(0.97); }
-    button .spinner { display: inline-block; width: 0.85em; height: 0.85em; margin-right: 0.4rem; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; vertical-align: -1px; animation: spin 0.7s linear infinite; }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    #refreshBtn.spinning { pointer-events: none; }
-    #refreshBtn.spinning svg { animation: spin 0.8s linear infinite; }
-    .btn-icon { display: inline-flex; align-items: center; gap: 0.4rem; }
-    .btn-icon svg { width: 1em; height: 1em; flex: 0 0 auto; }
-    main { padding: 1rem 1.5rem 2rem; display: grid; gap: 1rem; }
-    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-    @media (max-width: 960px) { .grid-2 { grid-template-columns: 1fr; } main { padding: 0.75rem; gap: 0.75rem; } header { padding: 0.75rem 1rem; } header h1 { font-size: 1.05rem; } header .meta { font-size: 0.78rem; } }
+
+    button.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    button.primary:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    button:hover:not(:disabled) {
+      filter: brightness(1.08);
+    }
+
+    button:active:not(:disabled) {
+      transform: scale(0.97);
+    }
+
+    button .spinner {
+      display: inline-block;
+      width: 0.85em;
+      height: 0.85em;
+      margin-right: 0.4rem;
+      border: 2px solid currentColor;
+      border-right-color: transparent;
+      border-radius: 50%;
+      vertical-align: -1px;
+      animation: spin 0.7s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    #refreshBtn.spinning {
+      pointer-events: none;
+    }
+
+    #refreshBtn.spinning svg,
+    #fetchBtn.spinning svg {
+      animation: spin 0.8s linear infinite;
+    }
+
+    .btn-icon {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .btn-icon svg {
+      width: 1em;
+      height: 1em;
+      flex: 0 0 auto;
+    }
+
+    #themeBtn {
+      padding: 0.45rem 0.55rem;
+    }
+
+    #themeBtn svg {
+      width: 1.15em;
+      height: 1.15em;
+    }
+
+    #themeBtn .theme-icon {
+      display: none;
+    }
+
+    [data-theme-mode="system"] #themeBtn .icon-system {
+      display: block;
+    }
+
+    [data-theme-mode="light"] #themeBtn .icon-light {
+      display: block;
+    }
+
+    [data-theme-mode="dark"] #themeBtn .icon-dark {
+      display: block;
+    }
+
+    main {
+      padding: 1rem 1.5rem 2rem;
+      display: grid;
+      gap: 1rem;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+
+    @media (max-width: 960px) {
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+
+      main {
+        padding: 0.75rem;
+        gap: 0.75rem;
+      }
+
+      header {
+        padding: 0.75rem 1rem;
+      }
+
+      header h1 {
+        font-size: 1.05rem;
+      }
+
+      header .meta {
+        font-size: 0.78rem;
+      }
+    }
+
     /* 移动端：≤720px 隐藏按钮文字只留图标，提升信息密度 */
     @media (max-width: 720px) {
-      .toolbar { width: 100%; margin-left: 0; justify-content: space-between; }
-      .btn-icon .btn-text { display: none; }
-      .btn-icon { padding: 0.5rem 0.6rem; }
-      .btn-icon svg { width: 1.15em; height: 1.15em; }
-      .tab-btn .tab-text { display: none; }
-      .tab-btn { padding: 0.45rem 0.6rem; }
-      .tab-btn svg { width: 1.1em; height: 1.1em; display: block; }
-      header { position: relative; padding: 0.65rem 0.85rem; gap: 0.5rem; }
-      header > div:first-child { flex: 1; min-width: 0; }
-      header h1 { font-size: 0.95rem; }
-      .brand-logo { width: 30px; height: 30px; }
-      .stat { padding: 0.65rem 0.75rem; }
-      .stat .value { font-size: 1.1rem; }
-      .stat .label { font-size: 0.7rem; }
-      .chart-wrap { height: 220px; }
-      .chart-wrap.tall { height: 260px; }
-      main { padding: 0.5rem; gap: 0.5rem; }
-      .card { padding: 0.75rem 0.85rem; border-radius: 10px; }
-      .card h2 { font-size: 0.88rem; margin-bottom: 0.5rem; }
-      .step-item { padding: 0.5rem 0.6rem; font-size: 0.78rem; }
-      .step-item strong { font-size: 0.9rem; }
-      .sync-table { font-size: 0.75rem; }
-      .sync-table th, .sync-table td { padding: 0.35rem 0.3rem; }
-      .log-box { height: 50vh; min-height: 240px; font-size: 0.72rem; }
-      .env-editor { min-height: 280px; font-size: 0.75rem; }
-      .toast { min-width: 200px; max-width: calc(100vw - 2rem); font-size: 0.82rem; }
-      .toast-stack { top: 0.5rem; right: 0.5rem; left: 0.5rem; }
-      select { max-width: 50vw; }
+      .toolbar {
+        width: 100%;
+        margin-left: 0;
+        justify-content: space-between;
+      }
+
+      .btn-icon .btn-text {
+        display: none;
+      }
+
+      .btn-icon {
+        padding: 0.5rem 0.6rem;
+      }
+
+      .btn-icon svg {
+        width: 1.15em;
+        height: 1.15em;
+      }
+
+      .tab-btn .tab-text {
+        display: none;
+      }
+
+      .tab-btn {
+        padding: 0.45rem 0.6rem;
+      }
+
+      .tab-btn svg {
+        width: 1.1em;
+        height: 1.1em;
+        display: block;
+      }
+
+      header {
+        position: relative;
+        padding: 0.65rem 0.85rem;
+        gap: 0.5rem;
+      }
+
+      header>div:first-child {
+        flex: 1;
+        min-width: 0;
+      }
+
+      header h1 {
+        font-size: 0.95rem;
+      }
+
+      .brand-logo {
+        width: 44px;
+        height: 44px;
+      }
+
+      .stat {
+        padding: 0.65rem 0.75rem;
+      }
+
+      .stat .value {
+        font-size: 1.1rem;
+      }
+
+      .stat .label {
+        font-size: 0.7rem;
+      }
+
+      .chart-wrap {
+        height: 220px;
+      }
+
+      .chart-wrap.tall {
+        height: 260px;
+      }
+
+      main {
+        padding: 0.5rem;
+        gap: 0.5rem;
+      }
+
+      .card {
+        padding: 0.75rem 0.85rem;
+        border-radius: 10px;
+      }
+
+      .card h2 {
+        font-size: 0.88rem;
+        margin-bottom: 0.5rem;
+      }
+
+      .step-item {
+        padding: 0.5rem 0.6rem;
+        font-size: 0.78rem;
+      }
+
+      .step-item strong {
+        font-size: 0.9rem;
+      }
+
+      .sync-table {
+        font-size: 0.75rem;
+      }
+
+      .sync-table th,
+      .sync-table td {
+        padding: 0.35rem 0.3rem;
+      }
+
+      .log-box {
+        height: 50vh;
+        min-height: 240px;
+        font-size: 0.72rem;
+      }
+
+      .env-editor {
+        min-height: 280px;
+        font-size: 0.75rem;
+      }
+
+      .toast {
+        min-width: 200px;
+        max-width: calc(100vw - 2rem);
+        font-size: 0.82rem;
+      }
+
+      .toast-stack {
+        top: 0.5rem;
+        right: 0.5rem;
+        left: 0.5rem;
+      }
+
+      select {
+        max-width: 50vw;
+      }
     }
+
     /* 超窄屏：≤400px 户号下拉折行 */
     @media (max-width: 400px) {
-      .toolbar { flex-direction: column; align-items: stretch; gap: 0.4rem; }
-      .tabs { justify-content: space-between; }
-      select { max-width: 100%; }
+      .toolbar {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.4rem;
+      }
+
+      .tabs {
+        justify-content: space-between;
+      }
+
+      select {
+        max-width: 100%;
+      }
     }
-    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 1rem 1.25rem; transition: border-color 0.2s, box-shadow 0.2s; }
-    .card:hover { border-color: rgba(59, 130, 246, 0.35); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2); }
-    .card h2 { font-size: 0.95rem; color: var(--muted); margin-bottom: 0.75rem; font-weight: 500; display: flex; align-items: center; gap: 0.5rem; }
-    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.75rem; }
-    .stat { background: #121a26; border-radius: 10px; padding: 0.85rem 0.95rem; position: relative; overflow: hidden; transition: transform 0.15s, border-color 0.2s; border: 1px solid transparent; }
-    .stat:hover { transform: translateY(-2px); border-color: var(--border); }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 1rem 1.25rem;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .card:hover {
+      border-color: var(--card-hover-border);
+      box-shadow: 0 4px 14px var(--card-shadow);
+    }
+
+    .card h2 {
+      font-size: 0.95rem;
+      color: var(--muted);
+      margin-bottom: 0.75rem;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .stats {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .stat {
+      background: var(--stat-bg);
+      border-radius: 10px;
+      padding: 0.85rem 0.95rem;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.15s, border-color 0.2s, background 0.2s;
+      border: 1px solid transparent;
+    }
+
+    .stat:hover {
+      transform: translateY(-2px);
+      border-color: var(--border);
+    }
+
     /* 色彩状态用左侧 3px 强调条突出，类似 APP 卡片 */
-    .stat.good { border-left: 3px solid var(--accent2); padding-left: calc(0.95rem - 2px); }
-    .stat.bad { border-left: 3px solid var(--danger); padding-left: calc(0.95rem - 2px); }
-    .stat.warn { border-left: 3px solid var(--warn); padding-left: calc(0.95rem - 2px); }
-    .stat .label { font-size: 0.75rem; color: var(--muted); display: flex; align-items: center; gap: 0.35rem; }
-    .stat .label svg { width: 0.95em; height: 0.95em; opacity: 0.85; }
-    .stat .value { font-size: 1.35rem; font-weight: 600; margin-top: 0.25rem; line-height: 1.2; }
-    .stat .value small { font-size: 0.8rem; color: var(--muted); font-weight: 400; }
-    .stat.good .value { color: var(--accent2); }
-    .stat.bad .value { color: var(--danger); }
-    .stat.warn .value { color: var(--warn); }
-    .stat .delta { display: inline-block; font-size: 0.7rem; padding: 0.05rem 0.35rem; border-radius: 4px; margin-top: 0.25rem; vertical-align: middle; }
-    .stat .delta.up { color: var(--danger); background: rgba(239, 68, 68, 0.12); }
-    .stat .delta.down { color: var(--accent2); background: rgba(16, 185, 129, 0.12); }
-    .log-box { background: #0a0e14; border-radius: 8px; padding: 0.75rem; height: calc(100vh - 220px); min-height: 360px; overflow: auto; font-family: Consolas, monospace; font-size: 0.78rem; white-space: pre-wrap; word-break: break-all; color: #b8c5d6; }
-    .sync-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-bottom: 1rem; }
-    .sync-table th, .sync-table td { border-bottom: 1px solid var(--border); padding: 0.45rem 0.5rem; text-align: left; }
-    .sync-table th { color: var(--muted); font-weight: 500; }
-    .log-user-group { margin-bottom: 1.25rem; }
-    .log-user-group h3 { font-size: 0.9rem; color: var(--text); margin-bottom: 0.5rem; font-weight: 600; }
-    .log-user-group h3 span { color: var(--muted); font-weight: 400; font-size: 0.82rem; }
-    .status-pill { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.75rem; background: #243044; white-space: nowrap; }
-    .status-pill.running { background: var(--warn-bg); color: var(--warn); }
-    .status-pill.running::before { content: ""; display: inline-block; width: 6px; height: 6px; background: var(--warn); border-radius: 50%; margin-right: 0.3rem; vertical-align: 1px; animation: pulse 1.2s ease-in-out infinite; }
-    .status-pill.success { background: var(--success-bg); color: var(--accent2); }
-    .status-pill.failed { background: var(--danger-bg); color: var(--danger); }
-    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
-    .chart-wrap { position: relative; height: 260px; }
-    .chart-wrap.tall { height: 300px; }
-    .grid-2 .span-full { grid-column: 1 / -1; }
-    .tabs { display: flex; gap: 0.5rem; }
-    .tab-btn { background: transparent; border: 1px solid var(--border); display: inline-flex; align-items: center; gap: 0.35rem; }
-    .tab-btn svg { width: 1em; height: 1em; flex: 0 0 auto; }
-    .tab-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-    .panel { display: none; }
-    .panel.active { display: grid; gap: 1rem; animation: fadeIn 0.25s ease; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-    .env-editor { width: 100%; min-height: 420px; background: #0a0e14; color: #b8c5d6; border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem; font-family: Consolas, monospace; font-size: 0.82rem; line-height: 1.45; resize: vertical; }
-    .env-meta, .hint { color: var(--muted); font-size: 0.82rem; }
-    .hint { margin-top: 0.5rem; }
-    .env-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.75rem; }
-    .step-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0.75rem; }
-    .step-item { background: #121a26; border-radius: 8px; padding: 0.65rem 0.75rem; font-size: 0.85rem; }
-    .step-item .title { color: var(--muted); font-size: 0.75rem; margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.4rem; }
-    .step-item strong { font-weight: 700; color: var(--text); font-size: 1rem; }
-    .step-bar { height: 6px; background: #0a0e14; border-radius: 3px; margin-top: 0.5rem; overflow: hidden; }
-    .step-bar > div { height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--accent2) 0%, var(--accent) 60%, var(--warn) 85%, var(--danger) 100%); transition: width 0.5s ease; }
-    .step-bar.split > div:nth-child(1) { background: var(--accent2); }
-    .step-bar.split > div:nth-child(2) { background: var(--accent); }
-    .step-bar.split > div:nth-child(3) { background: var(--warn); }
-    .step-badge { display: inline-block; padding: 0.1rem 0.45rem; border-radius: 6px; background: #1e3a5f; color: #93c5fd; font-size: 0.75rem; margin-left: 0.35rem; }
-    .banner { padding: 0.75rem 1rem; border-radius: 10px; border: 1px solid #7c2d12; background: #431407; color: #fdba74; font-size: 0.9rem; display: flex; align-items: center; gap: 0.6rem; }
-    .banner svg { flex: 0 0 auto; width: 1.1em; height: 1.1em; }
-    .banner.info { border-color: #1e3a5f; background: #172554; color: #93c5fd; }
+    .stat.good {
+      border-left: 3px solid var(--accent2);
+      padding-left: calc(0.95rem - 2px);
+    }
+
+    .stat.bad {
+      border-left: 3px solid var(--danger);
+      padding-left: calc(0.95rem - 2px);
+    }
+
+    .stat.warn {
+      border-left: 3px solid var(--warn);
+      padding-left: calc(0.95rem - 2px);
+    }
+
+    .stat .label {
+      font-size: 0.75rem;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .stat .label svg {
+      width: 0.95em;
+      height: 0.95em;
+      opacity: 0.85;
+    }
+
+    .stat .value {
+      font-size: 1.35rem;
+      font-weight: 600;
+      margin-top: 0.25rem;
+      line-height: 1.2;
+    }
+
+    .stat .value small {
+      font-size: 0.8rem;
+      color: var(--muted);
+      font-weight: 400;
+    }
+
+    .stat.good .value {
+      color: var(--accent2);
+    }
+
+    .stat.bad .value {
+      color: var(--danger);
+    }
+
+    .stat.warn .value {
+      color: var(--warn);
+    }
+
+    .stat .delta {
+      display: inline-block;
+      font-size: 0.7rem;
+      padding: 0.05rem 0.35rem;
+      border-radius: 4px;
+      margin-top: 0.25rem;
+      vertical-align: middle;
+    }
+
+    .stat .delta.up {
+      color: var(--danger);
+      background: rgba(239, 68, 68, 0.12);
+    }
+
+    .stat .delta.down {
+      color: var(--accent2);
+      background: rgba(16, 185, 129, 0.12);
+    }
+
+    .log-box {
+      background: var(--surface-deep);
+      border-radius: 8px;
+      padding: 0.75rem;
+      height: calc(100vh - 220px);
+      min-height: 360px;
+      overflow: auto;
+      font-family: Consolas, monospace;
+      font-size: 0.78rem;
+      white-space: pre-wrap;
+      word-break: break-all;
+      color: var(--log-text);
+    }
+
+    .sync-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.82rem;
+      margin-bottom: 1rem;
+    }
+
+    .sync-table th,
+    .sync-table td {
+      border-bottom: 1px solid var(--border);
+      padding: 0.45rem 0.5rem;
+      text-align: left;
+    }
+
+    .sync-table th {
+      color: var(--muted);
+      font-weight: 500;
+    }
+
+    .log-user-group {
+      margin-bottom: 1.25rem;
+    }
+
+    .log-user-group h3 {
+      font-size: 0.9rem;
+      color: var(--text);
+      margin-bottom: 0.5rem;
+      font-weight: 600;
+    }
+
+    .log-user-group h3 span {
+      color: var(--muted);
+      font-weight: 400;
+      font-size: 0.82rem;
+    }
+
+    .status-pill {
+      display: inline-block;
+      padding: 0.15rem 0.55rem;
+      border-radius: 999px;
+      font-size: 0.75rem;
+      background: var(--pill-bg);
+      white-space: nowrap;
+    }
+
+    .status-pill.running {
+      background: var(--warn-bg);
+      color: var(--warn);
+    }
+
+    .status-pill.running::before {
+      content: "";
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      background: var(--warn);
+      border-radius: 50%;
+      margin-right: 0.3rem;
+      vertical-align: 1px;
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+
+    .status-pill.success {
+      background: var(--success-bg);
+      color: var(--accent2);
+    }
+
+    .status-pill.failed {
+      background: var(--danger-bg);
+      color: var(--danger);
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.3;
+      }
+    }
+
+    .chart-wrap {
+      position: relative;
+      height: 260px;
+    }
+
+    .chart-wrap.tall {
+      height: 300px;
+    }
+
+    .grid-2 .span-full {
+      grid-column: 1 / -1;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .tab-btn {
+      background: transparent;
+      border: 1px solid var(--border);
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .tab-btn svg {
+      width: 1em;
+      height: 1em;
+      flex: 0 0 auto;
+    }
+
+    .tab-btn.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .panel {
+      display: none;
+    }
+
+    .panel.active {
+      display: grid;
+      gap: 1rem;
+      animation: fadeIn 0.25s ease;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(4px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .env-editor {
+      width: 100%;
+      min-height: 420px;
+      background: var(--surface-deep);
+      color: var(--log-text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.75rem;
+      font-family: Consolas, monospace;
+      font-size: 0.82rem;
+      line-height: 1.45;
+      resize: vertical;
+    }
+
+    .env-meta,
+    .hint {
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .hint {
+      margin-top: 0.5rem;
+    }
+
+    .env-actions {
+      display: flex;
+      gap: 0.5rem;
+      flex-wrap: wrap;
+      margin-top: 0.75rem;
+    }
+
+    .step-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 0.75rem;
+    }
+
+    .step-item {
+      background: var(--stat-bg);
+      border-radius: 8px;
+      padding: 0.65rem 0.75rem;
+      font-size: 0.85rem;
+    }
+
+    .step-item .title {
+      color: var(--muted);
+      font-size: 0.75rem;
+      margin-bottom: 0.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+
+    .step-item strong {
+      font-weight: 700;
+      color: var(--text);
+      font-size: 1rem;
+    }
+
+    .step-bar {
+      height: 6px;
+      background: var(--surface-deep);
+      border-radius: 3px;
+      margin-top: 0.5rem;
+      overflow: hidden;
+    }
+
+    .step-bar>div {
+      height: 100%;
+      border-radius: 3px;
+      background: linear-gradient(90deg, var(--accent2) 0%, var(--accent) 60%, var(--warn) 85%, var(--danger) 100%);
+      transition: width 0.5s ease;
+    }
+
+    .step-bar.split>div:nth-child(1) {
+      background: var(--accent2);
+    }
+
+    .step-bar.split>div:nth-child(2) {
+      background: var(--accent);
+    }
+
+    .step-bar.split>div:nth-child(3) {
+      background: var(--warn);
+    }
+
+    .step-item.step-current {
+      border: 1px solid var(--accent2);
+      background: color-mix(in srgb, var(--accent2) 8%, var(--stat-bg));
+    }
+
+    .step-item.step-current .title {
+      color: var(--accent2);
+      font-weight: 600;
+    }
+
+    .step-highlight {
+      grid-column: 1 / -1;
+      padding: 0.85rem 1rem;
+      border-radius: 10px;
+      border: 1px solid color-mix(in srgb, var(--accent2) 40%, var(--border));
+      background: color-mix(in srgb, var(--accent2) 6%, var(--stat-bg));
+    }
+
+    .step-highlight .step-main {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: baseline;
+      gap: 0.5rem 1.25rem;
+      margin-top: 0.35rem;
+    }
+
+    .step-highlight .step-main strong {
+      font-size: 1.25rem;
+    }
+
+    .step-badge {
+      display: inline-block;
+      padding: 0.1rem 0.45rem;
+      border-radius: 6px;
+      background: var(--step-badge-bg);
+      color: var(--step-badge-text);
+      font-size: 0.75rem;
+      margin-left: 0.35rem;
+    }
+
+    .banner {
+      padding: 0.75rem 1rem;
+      border-radius: 10px;
+      border: 1px solid var(--banner-warn-border);
+      background: var(--banner-warn-bg);
+      color: var(--banner-warn-text);
+      font-size: 0.9rem;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .banner svg {
+      flex: 0 0 auto;
+      width: 1.1em;
+      height: 1.1em;
+    }
+
+    .banner.info {
+      border-color: var(--banner-info-border);
+      background: var(--banner-info-bg);
+      color: var(--banner-info-text);
+    }
 
     /* Toast 通知 */
-    .toast-stack { position: fixed; top: 1rem; right: 1rem; z-index: 200; display: flex; flex-direction: column; gap: 0.5rem; pointer-events: none; max-width: calc(100vw - 2rem); }
-    .toast { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--accent); padding: 0.7rem 1rem; border-radius: 8px; box-shadow: 0 8px 20px rgba(0,0,0,0.45); font-size: 0.88rem; color: var(--text); display: flex; align-items: flex-start; gap: 0.55rem; min-width: 240px; max-width: 380px; pointer-events: auto; animation: toastIn 0.25s ease; }
-    .toast.success { border-left-color: var(--accent2); }
-    .toast.error { border-left-color: var(--danger); }
-    .toast.warn { border-left-color: var(--warn); }
-    .toast.info { border-left-color: var(--info); }
-    .toast svg { width: 1.05em; height: 1.05em; flex: 0 0 auto; margin-top: 1px; }
-    .toast.success svg { color: var(--accent2); }
-    .toast.error svg { color: var(--danger); }
-    .toast.warn svg { color: var(--warn); }
-    .toast.info svg { color: var(--info); }
-    .toast .toast-msg { flex: 1; }
-    .toast .toast-x { cursor: pointer; color: var(--muted); padding: 0 0.2rem; }
-    .toast.leaving { animation: toastOut 0.25s ease forwards; }
-    @keyframes toastIn { from { opacity: 0; transform: translateX(20px); } to { opacity: 1; transform: translateX(0); } }
-    @keyframes toastOut { to { opacity: 0; transform: translateX(20px); } }
+    .toast-stack {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      z-index: 200;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      pointer-events: none;
+      max-width: calc(100vw - 2rem);
+    }
+
+    .toast {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-left: 3px solid var(--accent);
+      padding: 0.7rem 1rem;
+      border-radius: 8px;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
+      font-size: 0.88rem;
+      color: var(--text);
+      display: flex;
+      align-items: flex-start;
+      gap: 0.55rem;
+      min-width: 240px;
+      max-width: 380px;
+      pointer-events: auto;
+      animation: toastIn 0.25s ease;
+    }
+
+    .toast.success {
+      border-left-color: var(--accent2);
+    }
+
+    .toast.error {
+      border-left-color: var(--danger);
+    }
+
+    .toast.warn {
+      border-left-color: var(--warn);
+    }
+
+    .toast.info {
+      border-left-color: var(--info);
+    }
+
+    .toast svg {
+      width: 1.05em;
+      height: 1.05em;
+      flex: 0 0 auto;
+      margin-top: 1px;
+    }
+
+    .toast.success svg {
+      color: var(--accent2);
+    }
+
+    .toast.error svg {
+      color: var(--danger);
+    }
+
+    .toast.warn svg {
+      color: var(--warn);
+    }
+
+    .toast.info svg {
+      color: var(--info);
+    }
+
+    .toast .toast-msg {
+      flex: 1;
+    }
+
+    .toast .toast-x {
+      cursor: pointer;
+      color: var(--muted);
+      padding: 0 0.2rem;
+    }
+
+    .toast.leaving {
+      animation: toastOut 0.25s ease forwards;
+    }
+
+    @keyframes toastIn {
+      from {
+        opacity: 0;
+        transform: translateX(20px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateX(0);
+      }
+    }
+
+    @keyframes toastOut {
+      to {
+        opacity: 0;
+        transform: translateX(20px);
+      }
+    }
 
     /* 自定义确认对话框 */
-    .modal-overlay { position: fixed; inset: 0; z-index: 150; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.55); backdrop-filter: blur(4px); animation: fadeIn 0.15s ease; }
-    .modal-box { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 1.25rem 1.25rem 1rem; width: min(380px, 92vw); box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
-    .modal-box .modal-msg { color: var(--text); font-size: 0.95rem; margin-bottom: 1rem; line-height: 1.5; }
-    .modal-actions { display: flex; gap: 0.5rem; justify-content: flex-end; }
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 150;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--modal-overlay);
+      backdrop-filter: blur(4px);
+      animation: fadeIn 0.15s ease;
+    }
+
+    .modal-box {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 1.25rem 1.25rem 1rem;
+      width: min(380px, 92vw);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+    }
+
+    .modal-box .modal-msg {
+      color: var(--text);
+      font-size: 0.95rem;
+      margin-bottom: 1rem;
+      line-height: 1.5;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 0.5rem;
+      justify-content: flex-end;
+    }
 
     /* 骨架屏 */
-    .skeleton { background: linear-gradient(90deg, #1a2332 0%, #2d3a4f 50%, #1a2332 100%); background-size: 200% 100%; animation: shimmer 1.3s linear infinite; border-radius: 8px; }
-    @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
-    .skeleton-line { height: 12px; margin-bottom: 8px; }
-    .skeleton-line.short { width: 60%; }
-    .skel-stat { background: #121a26; border-radius: 10px; padding: 0.85rem 0.95rem; }
-    .skel-stat .skeleton { height: 12px; margin-bottom: 8px; }
-    .skel-stat .skeleton.big { height: 22px; width: 70%; margin: 6px 0 0; }
+    .skeleton {
+      background: linear-gradient(90deg, var(--skeleton-a) 0%, var(--skeleton-b) 50%, var(--skeleton-a) 100%);
+      background-size: 200% 100%;
+      animation: shimmer 1.3s linear infinite;
+      border-radius: 8px;
+    }
 
-    .error-retry { color: var(--danger); font-size: 0.85rem; padding: 1rem; text-align: center; }
-    .error-retry button { margin-left: 0.5rem; padding: 0.25rem 0.75rem; }
+    @keyframes shimmer {
+      from {
+        background-position: 200% 0;
+      }
+
+      to {
+        background-position: -200% 0;
+      }
+    }
+
+    .skeleton-line {
+      height: 12px;
+      margin-bottom: 8px;
+    }
+
+    .skeleton-line.short {
+      width: 60%;
+    }
+
+    .skel-stat {
+      background: var(--stat-bg);
+      border-radius: 10px;
+      padding: 0.85rem 0.95rem;
+    }
+
+    .skel-stat .skeleton {
+      height: 12px;
+      margin-bottom: 8px;
+    }
+
+    .skel-stat .skeleton.big {
+      height: 22px;
+      width: 70%;
+      margin: 6px 0 0;
+    }
+
+    .error-retry {
+      color: var(--danger);
+      font-size: 0.85rem;
+      padding: 1rem;
+      text-align: center;
+    }
+
+    .error-retry button {
+      margin-left: 0.5rem;
+      padding: 0.25rem 0.75rem;
+    }
 
     .login-overlay {
-      position: fixed; inset: 0; z-index: 100;
-      display: flex; align-items: center; justify-content: center;
+      position: fixed;
+      inset: 0;
+      z-index: 100;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(59, 130, 246, 0.18) 0%, transparent 55%),
-                  radial-gradient(ellipse 60% 50% at 80% 100%, rgba(16, 185, 129, 0.12) 0%, transparent 50%),
-                  linear-gradient(165deg, #0a0e14 0%, #0f1419 40%, #121a26 100%);
+        radial-gradient(ellipse 60% 50% at 80% 100%, rgba(16, 185, 129, 0.12) 0%, transparent 50%),
+        var(--login-bg);
     }
+
     .login-overlay::before {
-      content: ""; position: absolute; inset: 0; opacity: 0.35;
+      content: "";
+      position: absolute;
+      inset: 0;
+      opacity: 0.35;
       background-image: linear-gradient(rgba(45, 58, 79, 0.4) 1px, transparent 1px),
-                        linear-gradient(90deg, rgba(45, 58, 79, 0.4) 1px, transparent 1px);
+        linear-gradient(90deg, rgba(45, 58, 79, 0.4) 1px, transparent 1px);
       background-size: 48px 48px;
       mask-image: radial-gradient(ellipse 70% 70% at 50% 50%, black 20%, transparent 75%);
     }
+
     .login-box {
-      position: relative; width: min(400px, 92vw);
-      background: linear-gradient(145deg, rgba(26, 35, 50, 0.95) 0%, rgba(18, 26, 38, 0.98) 100%);
+      position: relative;
+      width: min(400px, 92vw);
+      background: var(--login-box-bg);
       border: 1px solid rgba(59, 130, 246, 0.25);
-      border-radius: 20px; padding: 2rem 2rem 1.75rem;
-      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+      border-radius: 20px;
+      padding: 2rem 2rem 1.75rem;
+      box-shadow: 0 24px 48px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(255, 255, 255, 0.04) inset;
     }
-    .login-brand { text-align: center; margin-bottom: 1.75rem; }
+
+    .login-brand {
+      text-align: center;
+      margin-bottom: 1.75rem;
+    }
+
     .login-logo {
-      width: 72px; height: 72px; margin: 0 auto 1rem;
-      filter: drop-shadow(0 8px 16px rgba(59, 130, 246, 0.35));
+      width: 88px;
+      height: 88px;
+      margin: 0 auto 1rem;
+      filter: drop-shadow(0 8px 16px rgba(0, 102, 102, 0.35));
     }
+
     .login-brand h2 {
-      font-size: 1.35rem; font-weight: 600; letter-spacing: 0.02em;
-      background: linear-gradient(135deg, #e7ecf3 0%, #93c5fd 100%);
-      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+      font-size: 1.35rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+      background: var(--login-title-grad);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
     }
-    .login-brand .sub { color: var(--muted); font-size: 0.8rem; margin-top: 0.35rem; }
-    .login-field { margin-bottom: 1rem; }
-    .login-field label { display: block; font-size: 0.78rem; color: var(--muted); margin-bottom: 0.4rem; }
+
+    .login-brand .sub {
+      color: var(--muted);
+      font-size: 0.8rem;
+      margin-top: 0.35rem;
+    }
+
+    .login-field {
+      margin-bottom: 1rem;
+    }
+
+    .login-field label {
+      display: block;
+      font-size: 0.78rem;
+      color: var(--muted);
+      margin-bottom: 0.4rem;
+    }
+
     .login-field input {
-      width: 100%; padding: 0.65rem 0.85rem; border-radius: 10px;
-      background: #0a0e14; border: 1px solid var(--border);
+      width: 100%;
+      padding: 0.65rem 0.85rem;
+      border-radius: 10px;
+      background: var(--login-input-bg);
+      border: 1px solid var(--border);
       transition: border-color 0.2s, box-shadow 0.2s;
     }
+
     .login-field input:focus {
-      outline: none; border-color: var(--accent);
+      outline: none;
+      border-color: var(--accent);
       box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
     }
-    .login-box .err { color: var(--danger); font-size: 0.82rem; min-height: 1.25rem; margin-bottom: 0.5rem; text-align: center; }
+
+    .login-box .err {
+      color: var(--danger);
+      font-size: 0.82rem;
+      min-height: 1.25rem;
+      margin-bottom: 0.5rem;
+      text-align: center;
+    }
+
     .login-box .login-submit {
-      width: 100%; padding: 0.65rem; border-radius: 10px; border: none; cursor: pointer;
-      font-size: 0.95rem; font-weight: 600; color: #fff;
+      width: 100%;
+      padding: 0.65rem;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #fff;
       background: linear-gradient(135deg, #3b82f6 0%, #2563eb 50%, #1d4ed8 100%);
       box-shadow: 0 4px 14px rgba(59, 130, 246, 0.4);
       transition: transform 0.15s, box-shadow 0.15s;
     }
-    .login-box .login-submit:hover { transform: translateY(-1px); box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5); }
-    .hidden { display: none !important; }
+
+    .login-box .login-submit:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 20px rgba(59, 130, 246, 0.5);
+    }
+
+    .hidden {
+      display: none !important;
+    }
   </style>
 </head>
+
 <body>
   <div id="loginOverlay" class="login-overlay hidden">
     <div class="login-box">
       <div class="login-brand">
-        <svg class="login-logo" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-          <defs>
-            <linearGradient id="logoBg" x1="0" y1="0" x2="72" y2="72" gradientUnits="userSpaceOnUse">
-              <stop stop-color="#1e3a5f"/><stop offset="1" stop-color="#0f172a"/>
-            </linearGradient>
-            <linearGradient id="logoBolt" x1="36" y1="12" x2="36" y2="60" gradientUnits="userSpaceOnUse">
-              <stop stop-color="#fbbf24"/><stop offset="1" stop-color="#f59e0b"/>
-            </linearGradient>
-          </defs>
-          <rect x="4" y="4" width="64" height="64" rx="16" fill="url(#logoBg)" stroke="rgba(59,130,246,0.5)" stroke-width="1.5"/>
-          <circle cx="36" cy="36" r="22" stroke="rgba(59,130,246,0.35)" stroke-width="1.5" fill="none"/>
-          <path d="M38 18 L28 38 H34 L32 54 L44 32 H38 Z" fill="url(#logoBolt)" stroke="#fef3c7" stroke-width="0.5" stroke-linejoin="round"/>
-          <path d="M18 52 Q36 58 54 52" stroke="#10b981" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.7"/>
-        </svg>
+        <img class="login-logo" src="./sgcc-logo.svg" width="88" height="88" alt="" aria-hidden="true" />
         <h2>国家电网数据控制台</h2>
         <p class="sub">用电监控 · 数据同步</p>
       </div>
@@ -272,33 +1277,80 @@
 
   <header>
     <div class="brand">
-      <svg class="brand-logo" viewBox="0 0 72 72" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <defs>
-          <linearGradient id="hdrBg" x1="0" y1="0" x2="72" y2="72" gradientUnits="userSpaceOnUse">
-            <stop stop-color="#1e3a5f"/><stop offset="1" stop-color="#0f172a"/>
-          </linearGradient>
-          <linearGradient id="hdrBolt" x1="36" y1="12" x2="36" y2="60" gradientUnits="userSpaceOnUse">
-            <stop stop-color="#fbbf24"/><stop offset="1" stop-color="#f59e0b"/>
-          </linearGradient>
-        </defs>
-        <rect x="4" y="4" width="64" height="64" rx="16" fill="url(#hdrBg)" stroke="rgba(59,130,246,0.5)" stroke-width="1.5"/>
-        <path d="M38 18 L28 38 H34 L32 54 L44 32 H38 Z" fill="url(#hdrBolt)" stroke="#fef3c7" stroke-width="0.5" stroke-linejoin="round"/>
-      </svg>
+      <img class="brand-logo" src="./sgcc-logo.svg" width="56" height="56" alt="" aria-hidden="true" />
       <div>
         <h1>国家电网数据同步控制台</h1>
         <div class="meta" id="statusLine">加载中...</div>
       </div>
     </div>
     <div class="toolbar">
-      <div class="tabs">
-        <button type="button" class="tab-btn active" data-tab="monitor" aria-label="监控"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="M7 14l4-4 4 4 5-5"/></svg><span class="tab-text">监控</span></button>
-        <button type="button" class="tab-btn" data-tab="logs" aria-label="运行日志"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="16" y2="17"/></svg><span class="tab-text">运行日志</span></button>
-        <button type="button" class="tab-btn" data-tab="env" aria-label="环境配置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span class="tab-text">环境配置</span></button>
+      <div class="toolbar-user">
+        <select id="userSelect" aria-label="选择户号">
+          <option value="">选择户号...</option>
+        </select>
       </div>
-      <select id="userSelect"><option value="">选择户号...</option></select>
-      <button id="refreshBtn" class="btn-icon" title="刷新数据 (R)" aria-label="刷新数据"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/></svg><span class="btn-text">刷新数据</span></button>
-      <button id="fetchBtn" class="primary btn-icon" title="立即同步 (S)" aria-label="立即同步"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-3-6.7L21 8"/><path d="M21 3v5h-5"/></svg><span class="btn-text">立即同步</span></button>
-      <button id="logoutBtn" class="btn-icon hidden" aria-label="退出"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg><span class="btn-text">退出</span></button>
+      <div class="tabs">
+        <button type="button" class="tab-btn active" data-tab="monitor" aria-label="监控"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M3 3v18h18" />
+            <path d="M7 14l4-4 4 4 5-5" />
+          </svg><span class="tab-text">监控</span></button>
+        <button type="button" class="tab-btn" data-tab="logs" aria-label="运行日志"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+            <polyline points="14 2 14 8 20 8" />
+            <line x1="8" y1="13" x2="16" y2="13" />
+            <line x1="8" y1="17" x2="16" y2="17" />
+          </svg><span class="tab-text">运行日志</span></button>
+        <button type="button" class="tab-btn" data-tab="env" aria-label="环境配置"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3" />
+            <path
+              d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+          </svg><span class="tab-text">环境配置</span></button>
+      </div>
+      <button id="refreshBtn" class="btn-icon" title="刷新数据 (R)" aria-label="刷新数据"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M23 4v6h-6" />
+          <path d="M1 20v-6h6" />
+          <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10" />
+          <path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14" />
+        </svg><span class="btn-text">刷新数据</span></button>
+      <button id="fetchBtn" class="primary btn-icon" title="立即同步 (S)" aria-label="立即同步"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+          stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 12a9 9 0 11-3-6.7L21 8" />
+          <path d="M21 3v5h-5" />
+        </svg><span class="btn-text">立即同步</span></button>
+      <button id="themeBtn" type="button" class="btn-icon" title="切换主题：跟随系统 / 浅色 / 深色" aria-label="切换主题">
+        <svg class="theme-icon icon-system" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <rect x="2" y="3" width="20" height="14" rx="2" />
+          <line x1="8" y1="21" x2="16" y2="21" />
+          <line x1="12" y1="17" x2="12" y2="21" />
+        </svg>
+        <svg class="theme-icon icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5" />
+          <line x1="12" y1="1" x2="12" y2="3" />
+          <line x1="12" y1="21" x2="12" y2="23" />
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64" />
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78" />
+          <line x1="1" y1="12" x2="3" y2="12" />
+          <line x1="21" y1="12" x2="23" y2="12" />
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36" />
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22" />
+        </svg>
+        <svg class="theme-icon icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+          stroke-linejoin="round">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+        </svg>
+      </button>
+      <button id="logoutBtn" class="btn-icon hidden" aria-label="退出"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+          stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+          <polyline points="16 17 21 12 16 7" />
+          <line x1="21" y1="12" x2="9" y2="12" />
+        </svg><span class="btn-text">退出</span></button>
     </div>
   </header>
 
@@ -369,6 +1421,72 @@
     let lastSummary = null;
     let lastDailyData = [];
     let lastMonthlyData = [];
+    let themeMedia = null;
+
+    /* 主题：system（跟随系统）/ light / dark，偏好存 localStorage */
+    function resolveTheme(mode) {
+      if (mode === "system") {
+        return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+      }
+      return mode === "light" ? "light" : "dark";
+    }
+
+    function applyTheme(mode, { rerenderCharts = true } = {}) {
+      const resolved = resolveTheme(mode);
+      document.documentElement.setAttribute("data-theme", resolved);
+      document.documentElement.setAttribute("data-theme-mode", mode);
+      localStorage.setItem("dashboard_theme", mode);
+      const meta = document.getElementById("themeColorMeta");
+      if (meta) meta.content = resolved === "dark" ? "#0f1419" : "#f0f2f5";
+      const titles = { system: "主题：跟随系统", light: "主题：浅色", dark: "主题：深色" };
+      const btn = $("themeBtn");
+      if (btn) btn.title = titles[mode] + "（点击切换）";
+      if (rerenderCharts && lastDailyData.length) renderDailyComboChart(lastDailyData);
+      if (rerenderCharts && lastMonthlyData.length) renderMonthlyChart(lastMonthlyData);
+    }
+
+    function cycleTheme() {
+      const order = ["system", "light", "dark"];
+      const cur = document.documentElement.getAttribute("data-theme-mode") || localStorage.getItem("dashboard_theme") || "system";
+      const next = order[(order.indexOf(cur) + 1) % order.length];
+      applyTheme(next);
+    }
+
+    function initTheme() {
+      const mode = localStorage.getItem("dashboard_theme") || "system";
+      applyTheme(mode, { rerenderCharts: false });
+      themeMedia = window.matchMedia("(prefers-color-scheme: dark)");
+      themeMedia.addEventListener("change", () => {
+        if ((document.documentElement.getAttribute("data-theme-mode") || "system") === "system") {
+          applyTheme("system");
+        }
+      });
+    }
+
+    function chartTheme() {
+      const s = getComputedStyle(document.documentElement);
+      return {
+        muted: s.getPropertyValue("--chart-muted").trim() || "#8b9cb3",
+        grid: s.getPropertyValue("--chart-grid").trim() || "rgba(45,58,79,0.3)",
+        label: s.getPropertyValue("--chart-label").trim() || "#e7ecf3",
+        barLabel: s.getPropertyValue("--bar-label").trim() || "#fff",
+        tooltipBg: s.getPropertyValue("--chart-tooltip-bg").trim(),
+        tooltipTitle: s.getPropertyValue("--chart-tooltip-title").trim(),
+        tooltipBody: s.getPropertyValue("--chart-tooltip-body").trim(),
+        tooltipBorder: s.getPropertyValue("--chart-tooltip-border").trim(),
+        pointBorder: s.getPropertyValue("--chart-point-border").trim() || "#0f1419",
+      };
+    }
+
+    function buildChartTooltip() {
+      const t = chartTheme();
+      return {
+        backgroundColor: t.tooltipBg, titleColor: t.tooltipTitle, bodyColor: t.tooltipBody,
+        borderColor: t.tooltipBorder, borderWidth: 1, padding: 10, cornerRadius: 8, boxPadding: 4,
+        titleFont: { size: 12, weight: "600" }, bodyFont: { size: 12 },
+      };
+    }
+
     const ICONS = {
       balance: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>',
       usage: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>',
@@ -376,6 +1494,7 @@
       year: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>',
       tou: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
       due: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>',
+      step: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4V12H4z"/><path d="M10 20h4V8h-4z"/><path d="M16 20h4V4h-4z"/></svg>',
       info: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>',
       ok: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>',
       warn: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
@@ -541,37 +1660,87 @@
       monthlyCard.classList.remove("span-full");
       $("stepMonth").textContent = st.year_month || "—";
       const stageNames = ["", "第一阶梯", "第二阶梯", "第三阶梯"];
-      $("stepStage").textContent = stageNames[st.step_stage] || `第 ${st.step_stage} 阶梯`;
-      /* 阶梯进度条：用累计已用 + 三段容量估算占比，直观显示当前所处阶梯 */
-      const total = Number(st.total_usage) || 0;
-      const u1 = Number(st.used_step1) || 0;
-      const u2 = Number(st.used_step2) || 0;
-      const u3 = Number(st.used_step3) || 0;
-      const c1 = u1 + (Number(st.remain_step1) || 0);
-      const c2 = c1 + u2 + (Number(st.remain_step2) || 0);
-      const c3 = c2 + u3;
-      const denom = Math.max(c3, total, 1);
-      const pct = (x) => Math.max(0, Math.min(100, (x / denom) * 100));
-      let splitBars = "";
-      if (c1 > 0 && c2 > c1) {
-        /* 三段堆叠：一阶容量 / 二阶容量 / 三阶已用 */
-        splitBars = `<div class="step-bar split">
-          <div style="width:${pct(c1)}%"></div>
-          <div style="width:${pct(c2 - c1)}%"></div>
-          <div style="width:${pct(u3)}%"></div>
+      const stage = Number(st.step_stage) || 1;
+      $("stepStage").textContent = stageNames[stage] || `第 ${stage} 阶梯`;
+      const stageCfg = {
+        1: { used: st.used_step1, remain: st.remain_step1 },
+        2: { used: st.used_step2, remain: st.remain_step2 },
+        3: { used: st.used_step3, remain: null },
+      }[stage] || { used: st.used_step1, remain: st.remain_step1 };
+      const used = Number(stageCfg.used) || 0;
+      const remain = stageCfg.remain != null ? Number(stageCfg.remain) : null;
+      const capacity = remain != null ? used + remain : 0;
+      const pctCurrent = capacity > 0 ? Math.min(100, (used / capacity) * 100) : 0;
+      const remainHtml = remain != null && stage < 3
+        ? `<span style="color:var(--muted)">剩余 <strong>${fmtBold(stageCfg.remain, "kWh")}</strong></span>`
+        : "";
+      const highlight = `
+        <div class="step-highlight">
+          <div class="title">${stageNames[stage]} · 当前阶段</div>
+          <div class="step-main">
+            <span>已用 <strong>${fmtNum(stageCfg.used)}</strong> kWh</span>
+            ${remainHtml}
+            <span style="color:var(--muted)">累计 ${fmtNum(st.total_usage, "kWh")}</span>
+          </div>
+          ${capacity > 0 ? `<div class="step-bar"><div style="width:${pctCurrent.toFixed(1)}%"></div></div>` : ""}
         </div>`;
-      } else {
-        splitBars = `<div class="step-bar"><div style="width:${pct(total)}%"></div></div>`;
-      }
       const rows = [
-        ["第一阶梯", fmtBold(st.used_step1, "kWh"), fmtBold(st.remain_step1, "kWh"), "剩余"],
-        ["第二阶梯", fmtBold(st.used_step2, "kWh"), fmtBold(st.remain_step2, "kWh"), "剩余"],
-        ["第三阶梯", fmtBold(st.used_step3, "kWh"), null, null],
-        ["累计用电", fmtBold(st.total_usage, "kWh"), null, null],
+        [1, "第一阶梯", st.used_step1, st.remain_step1],
+        [2, "第二阶梯", st.used_step2, st.remain_step2],
+        [3, "第三阶梯", st.used_step3, null],
       ];
-      $("stepGrid").innerHTML = rows.map(([title, a, b, label]) =>
-        `<div class="step-item"><div class="title">${title}</div><div>已用 ${a}${b ? `<br><span style="color:var(--muted)">${label} ${b}</span>` : ""}</div></div>`
-      ).join("") + `<div class="step-item" style="grid-column:1/-1"><div class="title">阶梯进度</div>${splitBars}</div>`;
+      const detailRows = rows.map(([n, title, u, r]) => {
+        const cur = n === stage ? " step-current" : "";
+        const remainLine = r != null && n < 3 ? `<br><span style="color:var(--muted)">剩余 ${fmtBold(r, "kWh")}</span>` : "";
+        return `<div class="step-item${cur}"><div class="title">${title}${n === stage ? " · 当前" : ""}</div><div>已用 ${fmtBold(u, "kWh")}${remainLine}</div></div>`;
+      }).join("");
+      $("stepGrid").innerHTML = highlight + detailRows;
+    }
+
+    /* 当月分时：总量放标题，数值区只展示谷/峰 */
+    function touTotalKwh(tou) {
+      if (!tou) return null;
+      let total = tou.total_usage != null ? Number(tou.total_usage) : null;
+      if (total == null || !Number.isFinite(total)) {
+        total = [tou.valley, tou.flat, tou.peak, tou.tip].reduce((s, v) => s + (Number(v) || 0), 0);
+        if (total <= 0) total = null;
+      }
+      return total;
+    }
+
+    function fmtTouSummary(tou) {
+      if (!tou || (tou.valley == null && tou.peak == null)) return "—";
+      const parts = [];
+      if (tou.valley != null) parts.push(`谷 ${fmtNum(tou.valley)}`);
+      if (tou.peak != null) parts.push(`峰 ${fmtNum(tou.peak)}`);
+      return parts.join(" / ") + " kWh";
+    }
+
+    /* 概览卡片：仅展示当前所处阶梯的已用/剩余 */
+    function buildStepStatItem(s) {
+      const st = s.step_data;
+      if (!s.is_residential || !st) return null;
+      const stage = Number(st.step_stage) || 1;
+      const names = ["", "第一阶梯", "第二阶梯", "第三阶梯"];
+      const cfg = {
+        1: { used: st.used_step1, remain: st.remain_step1 },
+        2: { used: st.used_step2, remain: st.remain_step2 },
+        3: { used: st.used_step3, remain: null },
+      }[stage] || { used: st.used_step1, remain: st.remain_step1 };
+      const label = st.year_month ? `阶梯 · ${names[stage]} (${st.year_month})` : `阶梯 · ${names[stage]}`;
+      let value;
+      if (cfg.remain != null && stage < 3) {
+        value = `<strong>${fmtNum(cfg.used)}</strong> / 剩余 <strong>${fmtNum(cfg.remain)}</strong> kWh`;
+      } else {
+        value = `<strong>${fmtNum(cfg.used)}</strong> kWh`;
+      }
+      return {
+        label,
+        icon: ICONS.step,
+        value,
+        cls: stage >= 3 ? "warn" : "",
+        sub: `累计 ${fmtNum(st.total_usage, "kWh")}`,
+      };
     }
 
     /* 计算环比变化：current 与 previous 的百分比差，返回 {text, cls} 或 null */
@@ -590,22 +1759,21 @@
     function renderStats(s) {
       lastSummary = s;
       const tou = s.month_tou_summary || {};
-      const touText = tou.valley != null ? `谷 ${fmtNum(tou.valley)} / 峰 ${fmtNum(tou.peak)} kWh` : "—";
+      const touText = fmtTouSummary(tou);
+      const touTotal = touTotalKwh(tou);
       const billLabel = s.bill_month ? `(${s.bill_month})` : "";
       const billCharge = s.month_charge != null ? fmtNum(s.month_charge, "元") : "电费待出账";
       const yearlyLabel = s.yearly_label ? `${s.yearly_label} 年度` : "年度";
       const balanceLabel = s.balance_as_of ? `余额 (${s.balance_as_of.slice(0, 10)})` : "余额";
       const usageLabel = s.last_daily_date ? `最近用电 (${s.last_daily_date})` : "最近用电";
-      const touLabel = tou.month ? `当月分时 (${tou.month})` : "当月分时";
+      const touBase = tou.month ? `当月分时 (${tou.month})` : "当月分时";
+      const touLabel = touTotal != null ? `${touBase} · 总 ${fmtNum(touTotal)} kWh` : touBase;
       const balNum = Number(s.balance);
-      /* 余额色彩：<0 红，<30 橙，否则绿（健康） */
       const balCls = s.balance == null ? "" : (balNum < 0 ? "bad" : balNum < 30 ? "warn" : "good");
-      /* 应交金额：0 显示绿色"已交清"，>0 红色警示 */
       const dueZero = s.amount_due != null && Number(s.amount_due) === 0;
       const dueCls = s.amount_due == null ? "" : (dueZero ? "good" : "bad");
       const dueVal = dueZero ? '<strong>已交清</strong>' : fmtNum(s.amount_due, "元");
 
-      /* 环比/同比：基于已加载的月度/日度图表数据 */
       let usageDelta = null, billUsageDelta = null;
       if (lastDailyData.length >= 2) {
         usageDelta = deltaPct(lastDailyData[lastDailyData.length - 1].total_usage, lastDailyData[lastDailyData.length - 2].total_usage);
@@ -620,8 +1788,10 @@
         { label: `上月账单${billLabel}`, icon: ICONS.bill, value: `${fmtNum(s.month_usage, "kWh")} / ${billCharge}`, cls: "", sub: deltaHtml(billUsageDelta) },
         { label: yearlyLabel, icon: ICONS.year, value: `${fmtNum(s.yearly_usage, "kWh")} / ${fmtNum(s.yearly_charge, "元")}`, cls: "", sub: "" },
         { label: touLabel, icon: ICONS.tou, value: touText, cls: "", sub: "" },
-        { label: "应交金额", icon: ICONS.due, value: dueVal, cls: dueCls, sub: "" },
       ];
+      const stepItem = buildStepStatItem(s);
+      if (stepItem) items.push(stepItem);
+      items.push({ label: "应交金额", icon: ICONS.due, value: dueVal, cls: dueCls, sub: "" });
       $("statsGrid").innerHTML = items.map(it =>
         `<div class="stat ${it.cls}"><div class="label">${it.icon || ""}<span>${it.label}</span></div><div class="value">${it.value}${it.sub ? `<br>${it.sub}` : ""}</div></div>`
       ).join("");
@@ -631,18 +1801,12 @@
 
     function upsertChart(ref, canvas, config) { if (ref) ref.destroy(); return new Chart(canvas, config); }
 
-    /* 统一的 tooltip 样式：暗色卡片 + 标题 */
-    const chartTooltip = {
-      backgroundColor: "rgba(15, 20, 25, 0.95)", titleColor: "#e7ecf3", bodyColor: "#b8c5d6",
-      borderColor: "#2d3a4f", borderWidth: 1, padding: 10, cornerRadius: 8, boxPadding: 4,
-      titleFont: { size: 12, weight: "600" }, bodyFont: { size: 12 },
-    };
-
-    /* datalabel 智能隐藏：窄屏或数据点很多时只显示极值 */
+    /* 统一的 tooltip 样式，随主题切换 */
     function smartDatalabel(type, total) {
       const narrow = window.innerWidth < 640;
       const hideAll = narrow && total > 8;
       const hideSome = total > 15;
+      const ct = chartTheme();
       return {
         display: (ctx) => {
           const v = ctx.dataset.data[ctx.dataIndex];
@@ -661,7 +1825,7 @@
           return true;
         },
         formatter: (v, ctx) => ctx.dataset.type === "line" ? labelFmt(v) : barLabelFmt(v),
-        color: (ctx) => ctx.dataset.type === "line" ? "#e7ecf3" : "#fff",
+        color: (ctx) => ctx.dataset.type === "line" ? ct.label : ct.barLabel,
         font: (ctx) => ({ size: ctx.dataset.type === "line" ? 9 : 8, weight: "600" }),
         anchor: (ctx) => ctx.dataset.type === "line" ? "end" : "center",
         align: (ctx) => ctx.dataset.type === "line" ? "top" : "center",
@@ -670,6 +1834,7 @@
     }
 
     function renderDailyComboChart(data) {
+      const ct = chartTheme();
       dailyComboChart = upsertChart(dailyComboChart, $("dailyComboChart"), {
         type: "bar",
         data: {
@@ -685,38 +1850,41 @@
           maintainAspectRatio: false,
           interaction: { mode: "index", intersect: false },
           plugins: {
-            legend: { labels: { color: "#8b9cb3" } },
-            tooltip: chartTooltip,
+            legend: { labels: { color: ct.muted } },
+            tooltip: buildChartTooltip(),
             datalabels: smartDatalabel("daily", data.length),
           },
           scales: {
-            x: { stacked: true, ticks: { color: "#8b9cb3", maxRotation: 45, autoSkip: true, maxTicksLimit: 15 } },
-            y: { stacked: true, ticks: { color: "#8b9cb3" }, grace: "10%" },
+            x: { stacked: true, ticks: { color: ct.muted, maxRotation: 45, autoSkip: true, maxTicksLimit: 15 }, grid: { color: ct.grid } },
+            y: { stacked: true, ticks: { color: ct.muted }, grid: { color: ct.grid }, grace: "10%" },
           },
         },
       });
     }
 
     function renderMonthlyChart(data) {
+      const ct = chartTheme();
       monthlyChart = upsertChart(monthlyChart, $("monthlyChart"), {
         type: "bar",
-        data: { labels: data.map(d => d.month), datasets: [
-          { type: "bar", label: "用电量 kWh", data: data.map(d => d.total_usage), backgroundColor: "rgba(59,130,246,0.55)", borderColor: "rgba(59,130,246,0.8)", borderWidth: 1, borderRadius: 6, barPercentage: 0.5, categoryPercentage: 0.7, order: 2 },
-          { type: "line", label: "电费 元", data: data.map(d => d.total_charge), borderColor: "#10b981", backgroundColor: "rgba(16,185,129,0.10)", tension: 0.35, fill: true, order: 1, pointRadius: 4, pointBackgroundColor: "#10b981", pointBorderColor: "#0f1419", pointBorderWidth: 2, yAxisID: "y1" },
-        ]},
+        data: {
+          labels: data.map(d => d.month), datasets: [
+            { type: "bar", label: "用电量 kWh", data: data.map(d => d.total_usage), backgroundColor: "rgba(59,130,246,0.55)", borderColor: "rgba(59,130,246,0.8)", borderWidth: 1, borderRadius: 6, barPercentage: 0.5, categoryPercentage: 0.7, order: 2 },
+            { type: "line", label: "电费 元", data: data.map(d => d.total_charge), borderColor: "#10b981", backgroundColor: "rgba(16,185,129,0.10)", tension: 0.35, fill: true, order: 1, pointRadius: 4, pointBackgroundColor: "#10b981", pointBorderColor: ct.pointBorder, pointBorderWidth: 2, yAxisID: "y1" },
+          ]
+        },
         options: {
           responsive: true,
           maintainAspectRatio: false,
           interaction: { mode: "index", intersect: false },
           plugins: {
-            legend: { labels: { color: "#8b9cb3" } },
-            tooltip: chartTooltip,
+            legend: { labels: { color: ct.muted } },
+            tooltip: buildChartTooltip(),
             datalabels: smartDatalabel("monthly", data.length),
           },
           scales: {
-            x: { ticks: { color: "#8b9cb3" }, grid: { color: "rgba(45,58,79,0.3)" } },
-            y: { position: "left", title: { display: true, text: "用电量 kWh", color: "#8b9cb3" }, ticks: { color: "#8b9cb3" }, grid: { color: "rgba(45,58,79,0.3)" }, grace: "12%" },
-            y1: { position: "right", title: { display: true, text: "电费 元", color: "#8b9cb3" }, ticks: { color: "#8b9cb3" }, grid: { drawOnChartArea: false }, grace: "12%" },
+            x: { ticks: { color: ct.muted }, grid: { color: ct.grid } },
+            y: { position: "left", title: { display: true, text: "用电量 kWh", color: ct.muted }, ticks: { color: ct.muted }, grid: { color: ct.grid }, grace: "12%" },
+            y1: { position: "right", title: { display: true, text: "电费 元", color: ct.muted }, ticks: { color: ct.muted }, grid: { drawOnChartArea: false }, grace: "12%" },
           },
         },
       });
@@ -769,21 +1937,16 @@
       else if (data.users.length) { sel.value = data.users[0].user_id; await loadUser(data.users[0].user_id); }
     }
 
-    /* 同步中：让"立即同步"按钮显示 spinner；保留 .btn-text 节点以便复用 */
+    /* 同步中：旋转原有 SVG 图标，不再额外插入 spinner，避免双图标 */
     function setFetchLoading(loading) {
       const btn = $("fetchBtn");
       const txt = btn.querySelector(".btn-text");
-      const oldSpin = btn.querySelector(".spinner");
       if (loading) {
         btn.disabled = true;
-        if (!oldSpin) {
-          const sp = document.createElement("span");
-          sp.className = "spinner";
-          btn.insertBefore(sp, btn.firstChild);
-        }
+        btn.classList.add("spinning");
         if (txt) txt.textContent = "同步中...";
       } else {
-        if (oldSpin) oldSpin.remove();
+        btn.classList.remove("spinning");
         if (txt) txt.textContent = "立即同步";
       }
     }
@@ -798,6 +1961,7 @@
         if (sec <= 0) {
           clearInterval(cooldownTimer);
           cooldownTimer = null;
+          btn.classList.remove("spinning");
           if (txt) txt.textContent = "立即同步";
           btn.disabled = !dbEnabled;
           return;
@@ -846,8 +2010,8 @@
           <table class="sync-table">
             <thead><tr><th>同步时间</th><th>余额(元)</th><th>应交(元)</th></tr></thead>
             <tbody>${(g.records || []).map(r =>
-              `<tr><td>${r.sync_at || "—"}</td><td>${r.balance != null ? r.balance : "—"}</td><td>${r.amount_due != null ? r.amount_due : "—"}</td></tr>`
-            ).join("")}</tbody>
+        `<tr><td>${r.sync_at || "—"}</td><td>${r.balance != null ? r.balance : "—"}</td><td>${r.amount_due != null ? r.amount_due : "—"}</td></tr>`
+      ).join("")}</tbody>
           </table>
         </div>`).join("");
     }
@@ -882,13 +2046,14 @@
       finally { btn.classList.remove("spinning"); }
     });
     $("logoutBtn").addEventListener("click", async () => {
-      try { await api("/api/logout", { method: "POST" }); } catch (_) {}
+      try { await api("/api/logout", { method: "POST" }); } catch (_) { }
       sessionStorage.removeItem("dashboard_session");
       sessionToken = "";
       showLogin(true);
     });
     $("loginBtn").addEventListener("click", doLogin);
     $("loginPassword").addEventListener("keydown", (e) => { if (e.key === "Enter") doLogin(); });
+    $("themeBtn").addEventListener("click", cycleTheme);
     $("fetchBtn").addEventListener("click", async () => {
       if (!(await confirmBox("确定立即同步？国网有登录频率限制，请勿频繁操作。", { okText: "立即同步", danger: true }))) return;
       try { await api("/api/fetch", { method: "POST" }); toast("已启动同步，请查看运行日志", "success"); switchTab("logs"); await refreshAll(); }
@@ -929,7 +2094,6 @@
       $("panelMonitor").classList.toggle("active", name === "monitor");
       $("panelLogs").classList.toggle("active", name === "logs");
       $("panelEnv").classList.toggle("active", name === "env");
-      $("userSelect").style.display = name === "monitor" ? "" : "none";
       $("fetchBtn").style.display = name === "monitor" ? "" : "none";
       const refreshTxt = $("refreshBtn").querySelector(".btn-text");
       if (refreshTxt) refreshTxt.textContent = name === "logs" ? "刷新日志" : "刷新数据";
@@ -955,6 +2119,7 @@
     });
 
     async function bootstrap() {
+      initTheme();
       const cfg = await fetch("./api/config").then(r => r.json());
       loginRequired = !!cfg.login_required;
       dbEnabled = cfg.db_enabled !== false;
@@ -968,4 +2133,5 @@
     bootstrap().catch(() => showLogin(loginRequired));
   </script>
 </body>
+
 </html>

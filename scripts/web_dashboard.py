@@ -127,6 +127,8 @@ def _run_fetch_subprocess() -> None:
 
 
 def _register_routes(router: APIRouter) -> None:
+    _STATIC_SUFFIXES = {".png", ".ico", ".webp", ".svg"}
+
     @router.get("/")
     def index():
         index_file = _STATIC_DIR / "index.html"
@@ -306,6 +308,16 @@ def _register_routes(router: APIRouter) -> None:
         except Exception as e:
             logger.error("MQTT 重新发布失败: %s", e)
             raise HTTPException(status_code=500, detail=f"MQTT 重新发布失败: {str(e)}")
+
+    @router.get("/{filename}")
+    def dashboard_asset(filename: str):
+        """与 index.html 同目录的静态资源（logo、favicon），支持相对路径 ./xxx.png。"""
+        path = (_STATIC_DIR / filename).resolve()
+        if path.parent != _STATIC_DIR.resolve() or not path.is_file():
+            raise HTTPException(status_code=404, detail="not found")
+        if path.suffix.lower() not in _STATIC_SUFFIXES:
+            raise HTTPException(status_code=404, detail="not found")
+        return FileResponse(path)
 
 
 def create_app() -> FastAPI:

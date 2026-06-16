@@ -341,16 +341,16 @@ def get_user_summary(user_id: str) -> dict:
         cm = current_month_row[0]
         summary["month_tou_summary"] = {
             "month": cm.get("month"),
+            "total_usage": cm.get("total_usage"),
             "valley": cm.get("valley_usage"),
             "flat": cm.get("flat_usage"),
             "peak": cm.get("peak_usage"),
             "tip": cm.get("tip_usage"),
         }
-    if step:
-        summary["step_data"] = step[0]
-
     name = summary.get("user_name") or ""
-    summary["is_residential"] = "住宅" in name or bool(summary.get("step_data"))
+    summary["is_residential"] = "住宅" in name
+    if summary["is_residential"] and step:
+        summary["step_data"] = step[0]
     return summary
 
 
