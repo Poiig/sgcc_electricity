@@ -168,7 +168,7 @@ def normalize_electric_balance(components: list[dict[str, Any]], expected_user_i
         result["amount_due"] = _safe_float(raw.get("historyOwe"))
         result["as_of"] = raw.get("amtTime")
         result["user_id"] = str(raw.get("consNo") or raw.get("consId") or "").strip()
-        for key in ("oweAmt", "prepayBal", "balance", "usableAmt", "acctBalance", "surplusAmt"):
+        for key in ("sumMoney", "oweAmt", "prepayBal", "balance", "usableAmt", "acctBalance", "surplusAmt"):
             val = _safe_float(raw.get(key))
             if val is not None:
                 result["balance"] = val
