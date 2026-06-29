@@ -45,10 +45,10 @@
       --border: color-mix(in srgb, var(--bg-custom) 70%, #4a4a4a);
       --text: #e7ecf3;
       --muted: #8b9cb3;
-      /* 国网官方绿 #00716B：低饱和青绿，沉稳不鲜艳。白字按钮 5.88:1(AA)。
-         accent2 为同色系亮一档，用于 hover/数据区分，避免高饱和荧光感。 */
+      /* 国网青绿色阶：accent 主操作色，accent2 同色系深一档作 hover。
+         accent2 须配白字达 AA：#00635c 白字 6.03:1(原 #0d8a83 仅 3.56 不达标)。 */
       --accent: #00716b;
-      --accent2: #0d8a83;
+      --accent2: #00635c;
       --warn: #f59e0b;
       --danger: #ef4444;
       --info: #60a5fa;
@@ -105,9 +105,9 @@
       --text: #1a2332;
       /* muted 由 #64748b 调深至 #586476：在 bg 上 5.35:1、card 上 6.00:1，均达 AA 4.5:1 */
       --muted: #586476;
-      /* 国网官方绿 #00716B：浅色白底 5.88:1(AA)，低饱和不刺眼 */
+      /* 国网青绿色阶：accent 主操作白底 4.96:1(AA)，accent2 同色系深一档 */
       --accent: #00716b;
-      --accent2: #0d8a83;
+      --accent2: #00635c;
       --warn: #d97706;
       --danger: #dc2626;
       --info: #3b82f6;
@@ -2355,9 +2355,9 @@
     function getCurrentStepCfg(st) {
       const stage = Number(st.step_stage) || 1;
       const names = ["", "第一阶梯", "第二阶梯", "第三阶梯"];
-      /* 阶梯三段递进色阶：国网绿(正常档) → 青(第二档) → 橙(高档/超量)，统一在低饱和基调内 */
+      /* 阶梯三段递进色阶：国网青绿(正常档) → 蓝(第二档) → 橙(高档/超量) */
       const palette = {
-        1: { used: "#00716b", remain: "#0d8a83" },
+        1: { used: "#00716b", remain: "#1aa394" },
         2: { used: "#0ea5e9", remain: "#38bdf8" },
         3: { used: "#f59e0b", remain: "#fbbf24" },
       };
@@ -2661,7 +2661,7 @@
         data: {
           labels: data.map(d => d.date),
           datasets: [
-            { type: "bar", label: "谷 kWh", data: data.map(d => d.valley_usage || 0), backgroundColor: (c) => makeBarGradient(c, "#00716b", { topAlpha: 0.9, bottomAlpha: 0.55 }), hoverBackgroundColor: (c) => makeBarGradient(c, "#0d8a83", { topAlpha: 1, bottomAlpha: 0.65 }), borderWidth: 0, borderRadius: 6, borderSkipped: false, stack: "tou", order: 2 },
+            { type: "bar", label: "谷 kWh", data: data.map(d => d.valley_usage || 0), backgroundColor: (c) => makeBarGradient(c, "#00716b", { topAlpha: 0.9, bottomAlpha: 0.55 }), hoverBackgroundColor: (c) => makeBarGradient(c, "#1aa394", { topAlpha: 1, bottomAlpha: 0.65 }), borderWidth: 0, borderRadius: 6, borderSkipped: false, stack: "tou", order: 2 },
             { type: "bar", label: "峰 kWh", data: data.map(d => d.peak_usage || 0), backgroundColor: (c) => makeBarGradient(c, "#f59e0b", { topAlpha: 0.9, bottomAlpha: 0.55 }), hoverBackgroundColor: (c) => makeBarGradient(c, "#fbbf24", { topAlpha: 1, bottomAlpha: 0.65 }), borderWidth: 0, borderRadius: 0, borderSkipped: false, stack: "tou", order: 2 },
             { type: "line", label: "总用电 kWh", data: data.map(d => d.total_usage), borderColor: "#3b82f6", borderWidth: 2.5, backgroundColor: "rgba(59,130,246,0.1)", tension: 0.35, fill: false, order: 1, pointRadius: 0, pointHoverRadius: 5, pointBackgroundColor: "#3b82f6", pointBorderColor: ct.pointBorder, pointBorderWidth: 2 },
           ],
@@ -2693,7 +2693,7 @@
               type: "bar", label: "用电量 kWh", data: data.map(d => d.total_usage),
               /* 渐变柱：上实色下淡出，去掉丑描边；圆角加大；hover 提亮 */
               backgroundColor: (c) => makeBarGradient(c, "#00716b", { topAlpha: 0.95, bottomAlpha: 0.45 }),
-              hoverBackgroundColor: (c) => makeBarGradient(c, "#0d8a83", { topAlpha: 1, bottomAlpha: 0.6 }),
+              hoverBackgroundColor: (c) => makeBarGradient(c, "#1aa394", { topAlpha: 1, bottomAlpha: 0.6 }),
               borderWidth: 0, borderRadius: 8, borderSkipped: false,
               barPercentage: 0.62, categoryPercentage: 0.7, order: 2,
             },
