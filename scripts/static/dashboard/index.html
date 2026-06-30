@@ -94,6 +94,15 @@
       --focus-ring: rgba(45, 212, 191, 0.5);
       --focus-ring-strong: #2dd4bf;
       --focus-ring-offset: var(--card);
+      /* 环比标签文字：深底需亮色才达 4.5:1(原 accent2 #00635c 仅 1.95) */
+      --delta-up-fg: #fca5a5;
+      --delta-down-fg: #2dd4bf;
+      --delta-up-bg: rgba(239, 68, 68, 0.18);
+      --delta-down-bg: rgba(45, 212, 191, 0.16);
+      /* 状态数值色：good/bad 在深 stat-bg 上需亮色(原 accent2 仅 1.95、danger 3.71) */
+      --stat-good-fg: #34d399;
+      --stat-bad-fg: #f87171;
+      --stat-warn-fg: #fbbf24;
     }
 
     [data-theme="light"] {
@@ -152,6 +161,15 @@
       --focus-ring: rgba(0, 113, 107, 0.45);
       --focus-ring-strong: #00716b;
       --focus-ring-offset: var(--card);
+      /* 环比标签文字：浅底需深色才达 4.5:1 */
+      --delta-up-fg: #dc2626;
+      --delta-down-fg: #00716b;
+      --delta-up-bg: rgba(220, 38, 38, 0.1);
+      --delta-down-bg: rgba(0, 113, 107, 0.1);
+      /* 状态数值色：浅底需深色 */
+      --stat-good-fg: #00716b;
+      --stat-bad-fg: #dc2626;
+      --stat-warn-fg: #b45309;
     }
 
     * {
@@ -895,9 +913,9 @@
       font-variant-numeric: tabular-nums;
     }
 
-    /* 辅标：金额/环比等次要信息，小号 muted，不抢主数字 */
+    /* 辅标：金额/环比等次要信息。字号略放大(原0.72偏小)，颜色用略亮的 muted */
     .stat .extra {
-      font-size: 0.72rem;
+      font-size: 0.78rem;
       color: var(--muted);
       line-height: 1.5;
       display: flex;
@@ -927,34 +945,37 @@
       font-weight: 400;
     }
 
+    /* 状态数值色：用语义变量保证在 stat-bg 上 ≥4.5:1 */
     .stat.good .value {
-      color: var(--accent2);
+      color: var(--stat-good-fg);
     }
 
     .stat.bad .value {
-      color: var(--danger);
+      color: var(--stat-bad-fg);
     }
 
     .stat.warn .value {
-      color: var(--warn);
+      color: var(--stat-warn-fg);
     }
 
-    /* 环比标签：内联在 extra 里，不再独占一行 */
+    /* 环比标签：内联在 extra 里。文字用亮色保证在 stat-bg 上 ≥4.5:1
+       (原 accent2 #00635c 在深 stat-bg 仅 1.95:1 看不清) */
     .stat .delta {
       display: inline-block;
-      font-size: 0.7rem;
-      padding: 0.05rem 0.35rem;
+      font-size: 0.72rem;
+      font-weight: 600;
+      padding: 0.08rem 0.4rem;
       border-radius: 4px;
     }
 
     .stat .delta.up {
-      color: var(--danger);
-      background: rgba(239, 68, 68, 0.12);
+      color: var(--delta-up-fg);
+      background: var(--delta-up-bg);
     }
 
     .stat .delta.down {
-      color: var(--accent2);
-      background: rgba(0, 113, 107, 0.12);
+      color: var(--delta-down-fg);
+      background: var(--delta-down-bg);
     }
 
     .log-box {
@@ -1276,7 +1297,7 @@
       flex-wrap: wrap;
       align-items: center;
       gap: 0.35rem 0.55rem;
-      font-size: 0.78rem;
+      font-size: 0.8rem;
       font-weight: 400;
       color: var(--muted);
       width: 100%;
@@ -2417,13 +2438,17 @@
 
     function buildStepTitleExtra(cfg, st) {
       const el = $("stepTitleExtra");
+      /* 基础快照来源：截止 stat_month 国网统计 base_total kWh */
+      const baseHtml = st && st.stat_month && st.base_total != null
+        ? `<span class="step-cap-total">截止 ${st.stat_month} 国网统计 <strong>${fmtStepNum(st.base_total)}</strong> kWh</span>`
+        : "";
       const liveHtml = st && st.live_adjusted && st.live_extra_kwh > 0
         ? `<span class="step-cap-total">含实时 <strong>+${fmtStepNum(st.live_extra_kwh)}</strong> kWh</span>`
         : "";
       if (!cfg.hasRemain || !cfg.capacity) {
-        if (liveHtml) {
+        if (baseHtml || liveHtml) {
           el.classList.remove("hidden");
-          el.innerHTML = liveHtml;
+          el.innerHTML = `${baseHtml}${liveHtml}`;
         } else {
           el.classList.add("hidden");
           el.innerHTML = "";
@@ -2434,7 +2459,7 @@
       el.innerHTML = `
         <span class="step-cap-chip"><i style="background:${cfg.colors.used}"></i>已用</span>
         <span class="step-cap-chip"><i style="background:${colorMixAlpha(cfg.colors.remain, 0.55)}"></i>剩余</span>
-        <span class="step-cap-total">本阶额度 <strong>${fmtStepNum(cfg.capacity)}</strong> kWh</span>${liveHtml}`;
+        <span class="step-cap-total">本阶额度 <strong>${fmtStepNum(cfg.capacity)}</strong> kWh</span>${baseHtml}${liveHtml}`;
     }
 
     function paintStepPieChart(st, cfg) {
@@ -2598,12 +2623,14 @@
 
       /* 每张卡一个主指标：value 大号主数字，extra 小号辅标。避免长串拼接换行。
          分时拆成 总量/谷/峰 三张独立卡，单指标不再折行。 */
+      const touIsCurrent = s.month_tou_is_current !== false;
+      const touTitleLabel = touIsCurrent ? "当月总电量" : `${(tou.month || "上月").replace(/-\d+$/, "")} 分时`;
       const items = [
         { label: balanceLabel, icon: ICONS.balance, value: fmtNum(s.balance, "元"), cls: balCls, extra: "" },
         { label: usageLabel, icon: ICONS.usage, value: fmtNum(s.last_daily_usage, "kWh"), cls: "", extra: deltaHtml(usageDelta) },
         { label: billLabel, icon: ICONS.bill, value: fmtNum(s.month_usage, "kWh"), cls: "", extra: billCharge + deltaHtml(billUsageDelta) },
         { label: yearlyLabel, icon: ICONS.year, value: fmtNum(s.yearly_usage, "kWh"), cls: "", extra: s.yearly_charge != null ? fmtNum(s.yearly_charge, "元") : "" },
-        { label: "当月总电量", icon: ICONS.tou, value: touTotal != null ? fmtNum(touTotal, "kWh") : "—", cls: "", extra: tou.month || "" },
+        { label: touTitleLabel, icon: ICONS.tou, value: touTotal != null ? fmtNum(touTotal, "kWh") : "—", cls: "", extra: touIsCurrent ? (tou.month || "") : "上月数据" },
         { label: "谷电量", icon: ICONS.tou, value: tou.valley != null ? fmtNum(tou.valley, "kWh") : "—", cls: "", extra: "" },
         { label: "峰电量", icon: ICONS.tou, value: tou.peak != null ? fmtNum(tou.peak, "kWh") : "—", cls: "", extra: "" },
         { label: "应交金额", icon: ICONS.due, value: dueVal, cls: dueCls, extra: "" },

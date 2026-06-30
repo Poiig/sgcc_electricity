@@ -105,14 +105,16 @@ def _normalize_step_integers(step: dict) -> dict:
 
 def _resolve_step_stat_month(step_row: dict, prev_row: Optional[dict], bill_month: Optional[str]) -> str:
     """
-    推断国网阶梯页实际统计截止月。
-    同步写入的 year_month 可能是当前月，但页面数据仍停在上月或已出账月。
+    推断阶梯展示所用的「基础快照月」。
+    优先用上一行(prev_row)的月份作为基础：阶梯饼图 = 上月快照额度 + 之后各月实时用电拼接，
+    这样即使最新快照行存在，也能把该月用电以实时方式叠加进去，反映年度累计。
+    无 prev_row 时回退到 bill_month 或最新行月份。
     """
-    ym = str(step_row.get("year_month") or _current_month_key())[:7]
     if prev_row:
         prev_ym = str(prev_row.get("year_month") or "")[:7]
-        if prev_ym and _step_tiers_equal(step_row, prev_row):
+        if prev_ym:
             return prev_ym
+    ym = str(step_row.get("year_month") or _current_month_key())[:7]
     bill = str(bill_month or "")[:7]
     if bill and bill < ym:
         return bill
@@ -179,13 +181,18 @@ def _merge_step_with_live_usage(
     bill_month: Optional[str] = None,
 ) -> dict:
     """
-    在国网阶梯快照基础上叠加统计月之后各月的实时用电（日表/月表）。
-    仅用于控制台展示，不回写 step_usage 表。
+    阶梯饼图 = 基础快照额度 + 之后各月实时用电拼接，仅用于控制台展示，不回写表。
+    基础快照优先取 prev_row(上月)：这样最新行对应月份的用电会以实时方式叠加进去，
+    反映「上月阶梯 + 本月及之后用电」的年度累计口径。
     """
     stat_month = _resolve_step_stat_month(step_row, prev_row, bill_month)
+    # 基础值与 stat_month 对齐：用 prev_row 时基础也用 prev_row，避免与叠加重复
+    base_row = prev_row if (prev_row and str(prev_row.get("year_month") or "")[:7] == stat_month) else step_row
     current = _current_month_key()
-    result = _normalize_step_integers(step_row)
+    result = _normalize_step_integers(base_row)
     result["stat_month"] = stat_month
+    # 基础快照原始累计：供前端展示「截止 X 月国网统计 N kWh」
+    result["base_total"] = _round_step_kwh(float(base_row.get("total_usage") or 0))
     result["live_adjusted"] = False
     result["live_extra_kwh"] = 0.0
     result["live_extra_months"] = []
@@ -486,6 +493,7 @@ def get_user_summary(user_id: str) -> dict:
         "month_charge": None,
         "bill_month_tou": None,
         "month_tou_summary": None,
+        "month_tou_is_current": True,
         "step_data": None,
         "db_enabled": True,
     }
@@ -523,6 +531,20 @@ def get_user_summary(user_id: str) -> dict:
             "peak": cm.get("peak_usage"),
             "tip": cm.get("tip_usage"),
         }
+        summary["month_tou_is_current"] = True
+    elif bill_month_row:
+        # 跨月当天本月尚无数据：回退到上月(账单月)分时，避免卡片显示空。
+        # bill_month_row 已按「上月→再上月最新」回退，字段与 monthly_usage 一致。
+        m = bill_month_row[0]
+        summary["month_tou_summary"] = {
+            "month": m.get("month"),
+            "total_usage": m.get("total_usage"),
+            "valley": m.get("valley_usage"),
+            "flat": m.get("flat_usage"),
+            "peak": m.get("peak_usage"),
+            "tip": m.get("tip_usage"),
+        }
+        summary["month_tou_is_current"] = False
     name = summary.get("user_name") or ""
     is_ev = "电动车" in name or "充电" in name
     summary["is_residential"] = "住宅" in name and not is_ev
