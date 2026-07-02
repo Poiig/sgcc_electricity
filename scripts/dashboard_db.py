@@ -103,22 +103,41 @@ def _normalize_step_integers(step: dict) -> dict:
     return st
 
 
-def _resolve_step_stat_month(step_row: dict, prev_row: Optional[dict], bill_month: Optional[str]) -> str:
+def _resolve_step_stat_month(step_row: dict, prev_row: Optional[dict], bill_month: Optional[str], user_id: Optional[str] = None) -> str:
     """
-    推断阶梯展示所用的「基础快照月」。
-    优先用上一行(prev_row)的月份作为基础：阶梯饼图 = 上月快照额度 + 之后各月实时用电拼接，
-    这样即使最新快照行存在，也能把该月用电以实时方式叠加进去，反映年度累计。
-    无 prev_row 时回退到 bill_month 或最新行月份。
+    推断阶梯快照的「真实统计截止月」。
+
+    国网 step_usage 的 year_month 比真实统计截止月晚约 1 个月
+    (国网在 N 月初同步时，阶梯数据实际只统计到 N-1 月底)。
+    通过把 step.total_usage 与 monthly_usage 的逐月累计值对比，
+    找到 step.total == monthly累计[某月] 的那个月，即为真实截止月。
+    匹配不到时回退到 year_month 的上一月。
     """
-    if prev_row:
-        prev_ym = str(prev_row.get("year_month") or "")[:7]
-        if prev_ym:
-            return prev_ym
     ym = str(step_row.get("year_month") or _current_month_key())[:7]
-    bill = str(bill_month or "")[:7]
-    if bill and bill < ym:
-        return bill
-    return ym
+    step_total = round(float(step_row.get("total_usage") or 0))
+
+    # 对比法：用 monthly_usage 逐月累计，找 step_total 匹配的月份
+    if user_id and step_total > 0:
+        monthly_rows = _query(
+            "SELECT month, total_usage FROM monthly_usage WHERE user_id = ? ORDER BY month ASC",
+            (user_id,),
+        )
+        if monthly_rows:
+            cumulative = 0.0
+            matched: Optional[str] = None
+            for r in monthly_rows:
+                cumulative += float(r.get("total_usage") or 0)
+                # 容差 3 kWh(四舍五入/抄表口径差异)
+                if abs(round(cumulative) - step_total) <= 3:
+                    matched = str(r.get("month"))[:7]
+            if matched:
+                return matched
+
+    # 回退：无法匹配时，year_month 退一个月(国网滞后规律)
+    dt = datetime.strptime(ym, "%Y-%m")
+    if dt.month == 1:
+        return f"{dt.year - 1}-12"
+    return f"{dt.year}-{dt.month - 1:02d}"
 
 
 def _apply_extra_kwh_to_step(step: dict, extra: float) -> dict:
@@ -181,18 +200,17 @@ def _merge_step_with_live_usage(
     bill_month: Optional[str] = None,
 ) -> dict:
     """
-    阶梯饼图 = 基础快照额度 + 之后各月实时用电拼接，仅用于控制台展示，不回写表。
-    基础快照优先取 prev_row(上月)：这样最新行对应月份的用电会以实时方式叠加进去，
-    反映「上月阶梯 + 本月及之后用电」的年度累计口径。
+    阶梯饼图 = 国网快照额度(已统计到 stat_month) + 之后各月实时用电拼接。
+    stat_month 通过 step.total 与 monthly 累计对比反推(国网 year_month 滞后 1 月)。
+    仅用于控制台展示，不回写表。
     """
-    stat_month = _resolve_step_stat_month(step_row, prev_row, bill_month)
-    # 基础值与 stat_month 对齐：用 prev_row 时基础也用 prev_row，避免与叠加重复
-    base_row = prev_row if (prev_row and str(prev_row.get("year_month") or "")[:7] == stat_month) else step_row
+    # 对比法反推真实统计截止月；base_row 用最新 step 行(它已含到 stat_month 的累计)
+    stat_month = _resolve_step_stat_month(step_row, prev_row, bill_month, user_id)
     current = _current_month_key()
-    result = _normalize_step_integers(base_row)
+    result = _normalize_step_integers(step_row)
     result["stat_month"] = stat_month
     # 基础快照原始累计：供前端展示「截止 X 月国网统计 N kWh」
-    result["base_total"] = _round_step_kwh(float(base_row.get("total_usage") or 0))
+    result["base_total"] = _round_step_kwh(float(step_row.get("total_usage") or 0))
     result["live_adjusted"] = False
     result["live_extra_kwh"] = 0.0
     result["live_extra_months"] = []

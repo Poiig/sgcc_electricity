@@ -335,7 +335,9 @@ def _access_urls(port: int) -> str:
 def _run_uvicorn(host: str, port: int, app: FastAPI) -> None:
     import uvicorn
 
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    # timeout_graceful_shutdown：Ctrl+C 后最多等 3 秒强制关闭，
+    # 避免 MySQL 连接池等资源清理导致退出缓慢
+    uvicorn.run(app, host=host, port=port, log_level="warning", timeout_graceful_shutdown=3)
 
 
 def start_dashboard_servers(app: Optional[FastAPI] = None, block: bool = False) -> None:
