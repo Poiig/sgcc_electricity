@@ -156,7 +156,13 @@ def normalize_bill_detail(components: list[dict[str, Any]]) -> dict[str, Any]:
 
 
 def normalize_electric_balance(components: list[dict[str, Any]], expected_user_id: str = "") -> dict[str, Any]:
-    """从 userAcc / 电费电量页 Vue state 提取余额（预付费 oweAmt 等）。"""
+    """从 userAcc / 电费电量页 Vue state 提取账户余额。
+
+    关键：统一取「账户余额」(剩余可用金额)，与页面 DOM 的「账户余额」字段对齐。
+    - sumMoney 是上月用电金额(非余额)，必须排除，否则会把上月金额误当余额
+    - oweAmt 对后付费账户是应交金额，不是账户余额，降级处理
+    - 优先取预付费/账户余额类字段：prepayBal / acctBalance / surplusAmt / usableAmt / balance
+    """
     result = {
         "balance": None,
         "amount_due": None,
@@ -168,19 +174,19 @@ def normalize_electric_balance(components: list[dict[str, Any]], expected_user_i
         result["amount_due"] = _safe_float(raw.get("historyOwe"))
         result["as_of"] = raw.get("amtTime")
         result["user_id"] = str(raw.get("consNo") or raw.get("consId") or "").strip()
-        for key in ("sumMoney", "oweAmt", "prepayBal", "balance", "usableAmt", "acctBalance", "surplusAmt"):
+        # 账户余额字段优先级：预付费/余额类在前，sumMoney(上月金额)已排除
+        for key in ("prepayBal", "acctBalance", "surplusAmt", "usableAmt", "balance", "oweAmt"):
             val = _safe_float(raw.get(key))
             if val is not None:
                 result["balance"] = val
                 break
 
+    # elecItemData 仅用于补充户号，不再用 oweAmt 覆盖余额
+    # (oweAmt 对后付费账户是应交金额，会错误覆盖上面的真实余额)
     elec = _first_data_value(components, "elecItemData")
     if isinstance(elec, dict):
         if not result["user_id"]:
             result["user_id"] = str(elec.get("consNo") or elec.get("consId") or "").strip()
-        balance_val = _safe_float(elec.get("oweAmt"))
-        if balance_val is not None:
-            result["balance"] = balance_val
 
     if not result["user_id"]:
         user_info = normalize_user_info(components)

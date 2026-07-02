@@ -1523,29 +1523,31 @@ class DataFetcher:
             return []
 
     def _get_electric_balance(self, driver):
+        """从 DOM 提取账户余额（统一取「账户余额」字段，不分预付费/后付费）。
+
+        页面结构（预付费/后付费一致）：
+          <p class="balance_title">账户余额：<span>23.00</span>元</p>
+        应交金额是另一个字段，不能当余额用。
+        """
         try:
+            # 优先：找含「账户余额」的 balance_title，提取数字
             try:
-                # 定位是否有"应交金额"标题（确认是后缴费账户）
-                title_text = driver.find_element(By.XPATH, "//p[contains(@class, 'balance_title') and contains(text(), '应交金额')]").text
-                if "应交金额" in title_text:
-                    # 后缴费账户：需要查找"账户余额"，而不是"应交金额"
-                    # 查找包含"账户余额"的balance_title元素，然后获取其内部的金额
-                    balance_content = driver.find_element(By.XPATH, "//p[contains(@class, 'balance_title') and contains(text(), '账户余额')]")
-                    # 提取数字部分
-                    balance_text = re.sub(r'[^\d.]', '', balance_content.text)
-                    if balance_text:
-                        return float(balance_text)
-            except Exception as e:
-                # 后缴费账户解析失败，继续尝试预缴费账户逻辑
+                el = driver.find_element(
+                    By.XPATH,
+                    "//p[contains(@class, 'balance_title') and contains(text(), '账户余额')]",
+                )
+                balance_text = re.sub(r"[^\d.]", "", el.text)
+                if balance_text:
+                    return float(balance_text)
+            except Exception:
                 pass
 
-            # 2. 预缴费账户的"账户余额"（原逻辑）
+            # 回退：旧版预付费页面 .cff8 class
             balance_text = driver.find_element(By.CLASS_NAME, "cff8").text
             balance = balance_text.replace("元", "")
             if "欠费" in balance_text:
                 return -float(balance)
-            else:
-                return float(balance)
+            return float(balance)
         except Exception as e:
             logging.error(f"获取余额失败: {e}")
             return None
