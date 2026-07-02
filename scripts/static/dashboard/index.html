@@ -254,16 +254,27 @@
       background: var(--surface-deep);
     }
 
+    /* 主标题：加粗加重，建立明确视觉锚点 */
     header h1 {
-      font-size: 1.05rem;
-      font-weight: 600;
+      font-size: 1.08rem;
+      font-weight: 700;
       line-height: 1.2;
+      letter-spacing: -0.01em;
     }
 
+    /* 副标题：圆点分隔，muted 色调，与主标题形成层级 */
     .brand-sub {
       color: var(--muted);
-      font-size: 0.72rem;
-      margin-top: 0.1rem;
+      font-size: 0.74rem;
+      margin-top: 0.15rem;
+      letter-spacing: 0.01em;
+    }
+
+    .brand-sub .dot {
+      /* 用 success-fg：深浅主题均达 4.5:1，作品牌点缀的亮绿 */
+      color: var(--success-fg);
+      margin: 0 0.3rem;
+      opacity: 0.85;
     }
 
     /* 状态条：navbar 右侧，font 稍小，与导航标签区分 */
@@ -282,8 +293,11 @@
     .brand {
       display: flex;
       align-items: center;
-      gap: 0.6rem;
+      gap: 0.65rem;
       min-width: 0;
+      /* 右侧分隔线：品牌区与操作区(户号/按钮)视觉分离 */
+      padding-right: 1rem;
+      border-right: 1px solid var(--border);
     }
 
     .brand-text {
@@ -296,12 +310,18 @@
       display: block;
     }
 
+    /* logo 托盘：圆角背景容器。图标内容 38px + padding 5px = 48px 托盘，
+       图标占托盘 ~80% 饱满，托盘略高于标题文字区，品牌区有视觉重量 */
     .brand-logo {
       width: 38px;
       height: 38px;
       flex: 0 0 auto;
-      /* 中性阴影：去掉品牌绿发光，像真实工具栏图标 */
-      filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.2));
+      padding: 5px;
+      box-sizing: content-box;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 13px;
+      object-fit: contain;
     }
 
     .toolbar {
@@ -313,13 +333,49 @@
     }
 
     #userSelect {
-      min-width: 9.5rem;
-      max-width: 14rem;
+      /* 户号含姓名+13位编号(如 *凡（住宅） (3203077739963))，需更宽才不遮挡 */
+      min-width: 12rem;
+      max-width: 18rem;
       flex: 0 1 auto;
+      /* 去掉原生箭头，改用父容器叠加的 SVG 箭头，跨平台统一外观 */
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      /* 右侧留出自定义箭头空间 */
+      padding-right: 2.2rem;
     }
 
+    /* 户号选择容器：相对定位，承载自定义箭头 */
     .toolbar-user {
       flex: 0 0 auto;
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    /* 自定义下拉箭头：用 SVG 背景，颜色跟随 muted，绝对定位右侧 */
+    .toolbar-user::after {
+      content: "";
+      position: absolute;
+      right: 0.85rem;
+      top: 50%;
+      transform: translateY(-50%);
+      width: 0.7rem;
+      height: 0.7rem;
+      background: currentColor;
+      color: var(--muted);
+      pointer-events: none;
+      opacity: 0.7;
+      -webkit-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>") center / contain no-repeat;
+      mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'><polyline points='6 9 12 15 18 9'/></svg>") center / contain no-repeat;
+    }
+
+    /* 桌面端：按钮组与下拉并排同行 */
+    .toolbar-actions {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      flex-wrap: wrap;
     }
 
     button,
@@ -620,21 +676,61 @@
 
     /* 移动端：≤720px 隐藏按钮文字只留图标，提升信息密度 */
     @media (max-width: 720px) {
+      /* appbar 三行结构：① brand ② 户号下拉(独立成行) ③ 操作按钮组(均分，强制不换行) */
       .toolbar {
         width: 100%;
         margin-left: 0;
-        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 0.3rem;
+      }
+
+      /* 户号下拉独占一行，撑满宽度，触摸高度 44px。
+         display:flex 覆盖桌面端 inline-flex，否则容器收缩到内容宽度导致 select 只有半宽 */
+      .toolbar-user {
+        flex: 0 0 100%;
+        display: flex;
+        width: 100%;
+      }
+
+      .toolbar-user select,
+      #userSelect {
+        width: 100%;
+        /* 覆盖桌面端 #userSelect 的 max-width:14rem，否则移动端被限在 224px 只显示一半 */
+        max-width: 100%;
+        min-width: 0;
+        min-height: 44px;
+        padding: 0.55rem 2.2rem 0.55rem 0.85rem;
+        font-size: 0.92rem;
+        font-weight: 500;
+      }
+
+      /* 操作按钮组：独占一行，nowrap 强制所有按钮一排不换行 */
+      .toolbar-actions {
+        flex: 1 0 100%;
+        flex-wrap: nowrap;
+        gap: 0.25rem;
+      }
+
+      /* 按钮 flex:1 均分，min-width:0 + overflow:hidden 强制压缩不撑开 */
+      .toolbar-actions > .btn-icon,
+      .toolbar-actions > .bg-color-wrap {
+        flex: 1 1 0;
+        min-width: 0;
+      }
+
+      .toolbar-actions > .btn-icon {
+        overflow: hidden;
       }
 
       .btn-icon .btn-text {
         display: none;
       }
 
-      /* icon-only 按钮命中区提到 ≥44px（CRITICAL：触摸目标最小值），视觉尺寸不变 */
+      /* icon-only 按钮：保留 44px 触摸高度，宽度由 flex 自适应压缩。
+         padding 收窄让 6 个按钮在 320px 窄屏也能一行排开不换行。 */
       .btn-icon {
-        padding: 0.55rem 0.7rem;
+        padding: 0.55rem 0.3rem;
         min-height: 44px;
-        min-width: 44px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
@@ -643,6 +739,8 @@
       .btn-icon svg {
         width: 1.15em;
         height: 1.15em;
+        flex-shrink: 0;
+        max-width: 100%;
       }
 
       .tab-btn .tab-text {
@@ -691,9 +789,12 @@
         display: none;
       }
 
+      /* 移动端 logo：内容 34px + 托盘，比桌面略小适配紧凑 header */
       .brand-logo {
         width: 34px;
         height: 34px;
+        padding: 4px;
+        border-radius: 11px;
       }
 
       .stat {
@@ -773,7 +874,7 @@
       }
 
       select {
-        max-width: 50vw;
+        max-width: 100%;
       }
     }
 
@@ -1853,10 +1954,10 @@
   <header>
     <div class="appbar">
       <div class="brand">
-        <img class="brand-logo" src="./sgcc-logo.svg" width="56" height="56" alt="" aria-hidden="true" />
+        <img class="brand-logo" src="./sgcc-logo.svg" width="38" height="38" alt="" aria-hidden="true" />
         <div class="brand-text">
           <h1>电网数据同步控制台</h1>
-          <div class="brand-sub">用电监控 · 数据同步</div>
+          <div class="brand-sub">用电监控<span class="dot">·</span>数据同步</div>
         </div>
       </div>
       <div class="toolbar">
@@ -1865,6 +1966,7 @@
             <option value="">选择户号...</option>
           </select>
         </div>
+        <div class="toolbar-actions">
         <button id="refreshBtn" class="btn-icon" title="刷新数据 (R)" aria-label="刷新数据"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M23 4v6h-6" />
@@ -1922,6 +2024,7 @@
             <polyline points="16 17 21 12 16 7" />
             <line x1="21" y1="12" x2="9" y2="12" />
           </svg><span class="btn-text">退出</span></button>
+        </div>
       </div>
     </div>
     <div class="navbar">
