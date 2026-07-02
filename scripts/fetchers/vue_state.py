@@ -172,11 +172,16 @@ def normalize_electric_balance(components: list[dict[str, Any]], expected_user_i
     raw = _first_data_value(components, "mixinGetYuEdata")
     if isinstance(raw, dict):
         result["amount_due"] = _safe_float(raw.get("historyOwe"))
-        result["as_of"] = raw.get("amtTime")
+        result["as_of"] = raw.get("amtTime") or raw.get("date")
         result["user_id"] = str(raw.get("consNo") or raw.get("consId") or "").strip()
-        # 账户余额字段优先级：预付费/余额类在前，sumMoney(上月金额)已排除
-        for key in ("prepayBal", "acctBalance", "surplusAmt", "usableAmt", "balance", "oweAmt"):
+        # 账户余额字段优先级(基于 95598 真实 Vue state 字段含义)：
+        #   accountBalance=账户余额(最明确) / prepayBal=预付费余额
+        #   排除 sumMoney(上月用电金额，如127) 和 historyOwe(历史欠费，应交金额)
+        for key in ("accountBalance", "prepayBal", "acctBalance", "surplusAmt", "usableAmt", "balance"):
             val = _safe_float(raw.get(key))
+            if val is not None:
+                result["balance"] = val
+                break
             if val is not None:
                 result["balance"] = val
                 break
