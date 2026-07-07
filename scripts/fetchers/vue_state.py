@@ -177,7 +177,26 @@ def normalize_electric_balance(components: list[dict[str, Any]], expected_user_i
         # 账户余额字段优先级(基于 95598 真实 Vue state 字段含义)：
         #   accountBalance=账户余额(最明确) / prepayBal=预付费余额
         #   排除 sumMoney(上月用电金额，如127) 和 historyOwe(历史欠费，应交金额)
-        for key in ("accountBalance", "prepayBal", "acctBalance", "surplusAmt", "usableAmt", "balance"):
+        #
+        # For pre-paid customers in Beijing, `sumMoney` is the pre-paid balance while `prepayBal` is 0.
+        # I have to make a guess that this difference is handled by `consType` or `sceneType`.
+        # "mixinGetYuEdata": {
+        # "date": "2026-07-07 13:31:41",
+        # "prepayBal": "0",
+        # "consType": "1",
+        # "amtTime": "2026-07-07 00:00:00",
+        # "historyOwe": "0",
+        # "proCode": "11102",
+        # "sumMoney": "127.0",
+        # "sceneType": "03",
+        # "penalty": "0",
+        # "totalPq": "336.0",
+        # "consNo": "12345678",
+        # "uuid": "123456789abcdef"
+        # }
+        cons_type = int(raw.get("consType", 0))
+        candidates = ("sumMoney", ) if cons_type == 1 else ("accountBalance", "prepayBal", "acctBalance", "surplusAmt", "usableAmt", "balance")
+        for key in candidates:
             val = _safe_float(raw.get(key))
             if val is not None:
                 result["balance"] = val
