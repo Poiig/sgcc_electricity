@@ -194,8 +194,16 @@ def normalize_electric_balance(components: list[dict[str, Any]], expected_user_i
         # "consNo": "12345678",
         # "uuid": "123456789abcdef"
         # }
-        cons_type = int(raw.get("consType", 0))
-        candidates = ("sumMoney", ) if cons_type == 1 else ("accountBalance", "prepayBal", "acctBalance", "surplusAmt", "usableAmt", "balance")
+        # consType=1 北京预付费：sumMoney 是预付费余额，prepayBal 为 0
+        # consType=0/其他 后付费：sumMoney 是上月金额(非余额)，取 accountBalance/prepayBal
+        try:
+            cons_type = int(raw.get("consType") or 0)
+        except (TypeError, ValueError):
+            cons_type = 0
+        if cons_type == 1:
+            candidates = ("sumMoney", "prepayBal", "accountBalance")
+        else:
+            candidates = ("accountBalance", "prepayBal", "balance")
         for key in candidates:
             val = _safe_float(raw.get(key))
             if val is not None:
