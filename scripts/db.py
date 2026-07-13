@@ -871,6 +871,14 @@ class PostgresqlDB(DB):
                 PRIMARY KEY (user_id, year_month)
             )""")
 
+            # balance_log 有两条不带 user_id、纯按 created_at DESC 取 Top-N 的报表查询
+            # (list_balance_logs / latest_balance_log_timestamp)，主键 (user_id, as_of) 覆盖不到，
+            # 补单列索引避免 seq scan + sort。PG btree 天然双向，DESC 走 backward scan。
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_balance_log_created_at "
+                f"ON {self.BALANCE_TABLE} (created_at)"
+            )
+
             self.connect.commit()
         except Exception as exc:
             self.connect.rollback()
