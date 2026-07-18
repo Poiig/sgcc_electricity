@@ -482,9 +482,9 @@ def get_user_summary(user_id: str) -> dict:
     )
 
     step_rows = _query(
-        "SELECT `year_month`, used_step1, remain_step1, used_step2, remain_step2, "
+        "SELECT year_month, used_step1, remain_step1, used_step2, remain_step2, "
         "used_step3, total_usage, step_stage FROM step_usage "
-        "WHERE user_id = ? ORDER BY `year_month` DESC LIMIT 2",
+        "WHERE user_id = ? ORDER BY year_month DESC LIMIT 2",
         (user_id,),
     )
 
