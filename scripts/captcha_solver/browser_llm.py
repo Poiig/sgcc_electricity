@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 
 import requests
 from PIL import Image
+from selenium.common.exceptions import StaleElementReferenceException
 from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.remote.webdriver import WebDriver
@@ -68,135 +69,150 @@ def solve_captcha_in_browser(
         pass
 
     for attempt in range(max_retries):
-        logger.info("验证码尝试 %s/%s", attempt + 1, max_retries)
+        try:
+            logger.info("验证码尝试 %s/%s", attempt + 1, max_retries)
 
-        if not _wait_for_captcha(driver, timeout):
-            logger.warning("验证码未出现")
-            continue
+            if not _wait_for_captcha(driver, timeout):
+                logger.warning("验证码未出现")
+                continue
 
-        captcha_type = _detect_captcha_type_js(driver)
-        logger.info("验证码类型: %s", captcha_type)
+            captcha_type = _detect_captcha_type_js(driver)
+            logger.info("验证码类型: %s", captcha_type)
 
-        if captcha_type == "slider":
-            if _solve_slider(driver, selectors):
-                logger.info("滑块验证码已解算")
+            if captcha_type == "slider":
+                if _solve_slider(driver, selectors):
+                    logger.info("滑块验证码已解算")
+                    if implicit_wait_backup is not None:
+                        try:
+                            driver.implicitly_wait(implicit_wait_backup)
+                        except Exception:
+                            pass
+                    return True
+                _refresh_captcha(driver, selectors)
+                time.sleep(2)
+                continue
+
+            if captcha_type != "click":
+                for refresh_i in range(5):
+                    logger.info("获取到 %s，正在刷新 (%s/5)...", captcha_type, refresh_i + 1)
+                    _refresh_captcha(driver, selectors)
+                    time.sleep(2)
+                    captcha_type = _detect_captcha_type_js(driver)
+                    logger.info("刷新后验证码类型: %s", captcha_type)
+                    if captcha_type == "click":
+                        break
+                    if captcha_type == "slider":
+                        if _solve_slider(driver, selectors):
+                            logger.info("刷新后滑块已解算")
+                            if implicit_wait_backup is not None:
+                                try:
+                                    driver.implicitly_wait(implicit_wait_backup)
+                                except Exception:
+                                    pass
+                            return True
+                if captcha_type != "click":
+                    continue
+
+            ref_url = _extract_ref_url(driver, selectors)
+            main_url, main_size = _extract_main_url(driver, selectors)
+
+            if not ref_url or not main_url or not main_size:
+                logger.warning("提取验证码图片 URL 失败，正在刷新...")
+                _refresh_captcha(driver, selectors)
+                time.sleep(1)
+                continue
+
+            logger.info("主图尺寸=%s", main_size)
+            _save_debug_images(ref_url, main_url)
+
+            logger.info(
+                "调用大模型解算点选验证码 (model=%s, endpoint=%s)...",
+                llm_model(),
+                llm_base_url(),
+            )
+            coords = solver.solve(ref_url, main_url, main_size[0], main_size[1])
+            if not coords or len(coords) < 2:
+                logger.warning("大模型仅返回 %s 个坐标，正在刷新...", len(coords or []))
+                _refresh_captcha(driver, selectors)
+                time.sleep(1)
+                continue
+            logger.info("大模型坐标: %s", coords)
+
+            expected_aspect = main_size[0] / main_size[1]
+            image_el = _find_main_image_element(driver, selectors, expected_aspect)
+            if image_el is None:
+                logger.error("找不到主图元素")
+                continue
+
+            rect = driver.execute_script(
+                "var r = arguments[0].getBoundingClientRect();"
+                "return {x: r.x, y: r.y, w: r.width, h: r.height};",
+                image_el,
+            )
+            if rect["h"] < 10:
+                image_el = _find_element(driver, selectors.get("image_area"))
+                if image_el is None:
+                    continue
+                rect = driver.execute_script(
+                    "var r = arguments[0].getBoundingClientRect();"
+                    "return {x: r.x, y: r.y, w: r.width, h: r.height};",
+                    image_el,
+                )
+
+            scale_x = rect["w"] / main_size[0]
+            scale_y = rect["h"] / main_size[1]
+            logger.info("图片区域: rect=%s, 缩放=(%.3f, %.3f)", rect, scale_x, scale_y)
+
+            for i, (cx, cy) in enumerate(coords[:3]):
+                px = cx * scale_x
+                py = cy * scale_y
+                offset_x = int(px - rect["w"] / 2)
+                offset_y = int(py - rect["h"] / 2)
+                logger.info("点击 #%s: 像素=(%s,%s) -> 偏移=(%s,%s)", i + 1, cx, cy, offset_x, offset_y)
+                _click_with_actions(driver, image_el, offset_x, offset_y)
+                time.sleep(random.uniform(0.25, 0.55))
+
+            time.sleep(1)
+
+            confirm_btn = _find_element(driver, selectors.get("confirm_btn"))
+            if confirm_btn is not None and confirm_btn.is_displayed():
+                try:
+                    WebDriverWait(driver, 3).until(
+                        lambda _d: "disabled" not in (confirm_btn.get_attribute("class") or "")
+                    )
+                    logger.info("确认按钮已启用，正在点击...")
+                    driver.execute_script("arguments[0].click();", confirm_btn)
+                    time.sleep(2)
+                except Exception:
+                    logger.info("点击后确认按钮仍为禁用状态")
+
+            time.sleep(2)
+            if _check_passed(driver, selectors):
+                logger.info("验证码已通过")
                 if implicit_wait_backup is not None:
                     try:
                         driver.implicitly_wait(implicit_wait_backup)
                     except Exception:
                         pass
                 return True
+
+            logger.info("未通过，正在刷新...")
             _refresh_captcha(driver, selectors)
+            time.sleep(1)
+        except StaleElementReferenceException:
+            # 验证码 DOM 被重新渲染（验证已完成或自动换了一张图），不能直接当失败退出
+            logger.warning("验证码元素已失效（页面已刷新或验证已完成），重新检查是否通过...")
             time.sleep(2)
+            if _check_passed(driver, selectors):
+                logger.info("验证码已通过")
+                if implicit_wait_backup is not None:
+                    try:
+                        driver.implicitly_wait(implicit_wait_backup)
+                    except Exception:
+                        pass
+                return True
+            logger.info("验证码仍未通过，继续下一次尝试")
             continue
-
-        if captcha_type != "click":
-            for refresh_i in range(5):
-                logger.info("获取到 %s，正在刷新 (%s/5)...", captcha_type, refresh_i + 1)
-                _refresh_captcha(driver, selectors)
-                time.sleep(2)
-                captcha_type = _detect_captcha_type_js(driver)
-                logger.info("刷新后验证码类型: %s", captcha_type)
-                if captcha_type == "click":
-                    break
-                if captcha_type == "slider":
-                    if _solve_slider(driver, selectors):
-                        logger.info("刷新后滑块已解算")
-                        if implicit_wait_backup is not None:
-                            try:
-                                driver.implicitly_wait(implicit_wait_backup)
-                            except Exception:
-                                pass
-                        return True
-            if captcha_type != "click":
-                continue
-
-        ref_url = _extract_ref_url(driver, selectors)
-        main_url, main_size = _extract_main_url(driver, selectors)
-
-        if not ref_url or not main_url or not main_size:
-            logger.warning("提取验证码图片 URL 失败，正在刷新...")
-            _refresh_captcha(driver, selectors)
-            time.sleep(1)
-            continue
-
-        logger.info("主图尺寸=%s", main_size)
-        _save_debug_images(ref_url, main_url)
-
-        logger.info(
-            "调用大模型解算点选验证码 (model=%s, endpoint=%s)...",
-            llm_model(),
-            llm_base_url(),
-        )
-        coords = solver.solve(ref_url, main_url, main_size[0], main_size[1])
-        if not coords or len(coords) < 2:
-            logger.warning("大模型仅返回 %s 个坐标，正在刷新...", len(coords or []))
-            _refresh_captcha(driver, selectors)
-            time.sleep(1)
-            continue
-        logger.info("大模型坐标: %s", coords)
-
-        expected_aspect = main_size[0] / main_size[1]
-        image_el = _find_main_image_element(driver, selectors, expected_aspect)
-        if image_el is None:
-            logger.error("找不到主图元素")
-            continue
-
-        rect = driver.execute_script(
-            "var r = arguments[0].getBoundingClientRect();"
-            "return {x: r.x, y: r.y, w: r.width, h: r.height};",
-            image_el,
-        )
-        if rect["h"] < 10:
-            image_el = _find_element(driver, selectors.get("image_area"))
-            if image_el is None:
-                continue
-            rect = driver.execute_script(
-                "var r = arguments[0].getBoundingClientRect();"
-                "return {x: r.x, y: r.y, w: r.width, h: r.height};",
-                image_el,
-            )
-
-        scale_x = rect["w"] / main_size[0]
-        scale_y = rect["h"] / main_size[1]
-        logger.info("图片区域: rect=%s, 缩放=(%.3f, %.3f)", rect, scale_x, scale_y)
-
-        for i, (cx, cy) in enumerate(coords[:3]):
-            px = cx * scale_x
-            py = cy * scale_y
-            offset_x = int(px - rect["w"] / 2)
-            offset_y = int(py - rect["h"] / 2)
-            logger.info("点击 #%s: 像素=(%s,%s) -> 偏移=(%s,%s)", i + 1, cx, cy, offset_x, offset_y)
-            _click_with_actions(driver, image_el, offset_x, offset_y)
-            time.sleep(random.uniform(0.25, 0.55))
-
-        time.sleep(1)
-
-        confirm_btn = _find_element(driver, selectors.get("confirm_btn"))
-        if confirm_btn is not None and confirm_btn.is_displayed():
-            try:
-                WebDriverWait(driver, 3).until(
-                    lambda _d: "disabled" not in (confirm_btn.get_attribute("class") or "")
-                )
-                logger.info("确认按钮已启用，正在点击...")
-                driver.execute_script("arguments[0].click();", confirm_btn)
-                time.sleep(2)
-            except Exception:
-                logger.info("点击后确认按钮仍为禁用状态")
-
-        time.sleep(2)
-        if _check_passed(driver, selectors):
-            logger.info("验证码已通过")
-            if implicit_wait_backup is not None:
-                try:
-                    driver.implicitly_wait(implicit_wait_backup)
-                except Exception:
-                    pass
-            return True
-
-        logger.info("未通过，正在刷新...")
-        _refresh_captcha(driver, selectors)
-        time.sleep(1)
 
     logger.error("所有重试后验证码解算失败")
     if implicit_wait_backup is not None:
@@ -579,13 +595,22 @@ def _check_passed(driver: WebDriver, selectors: dict) -> bool:
             return True
     except Exception:
         pass
-    el = _find_element(driver, selectors["content"], wait=0.5)
-    if el is None or not el.is_displayed():
+    if not _captcha_visible(driver, selectors):
         time.sleep(2)
-        el2 = _find_element(driver, selectors["content"], wait=0.5)
-        if el2 is None or not el2.is_displayed():
+        if not _captcha_visible(driver, selectors):
             return True
     return False
+
+
+def _captcha_visible(driver: WebDriver, selectors: dict) -> bool:
+    """验证码弹窗是否仍在显示；元素刚被移除（stale）视为不显示。"""
+    el = _find_element(driver, selectors["content"], wait=0.5)
+    if el is None:
+        return False
+    try:
+        return el.is_displayed()
+    except StaleElementReferenceException:
+        return False
 
 
 def _refresh_captcha(driver: WebDriver, selectors: dict):

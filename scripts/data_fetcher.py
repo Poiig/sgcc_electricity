@@ -525,6 +525,11 @@ class DataFetcher:
                         if driver.current_url != LOGIN_URL:
                             logging.info("验证码识别成功, 已通过验证!")
                             return True
+                    # 验证码流程报错时，验证可能其实已经通过、页面已跳转，先确认再决定是否转扫码
+                    time.sleep(self._step_wait)
+                    if "/login" not in (driver.current_url or ""):
+                        logging.info(f"验证码流程未确认成功, 但页面已离开登录页 ({driver.current_url}), 视为登录成功")
+                        return True
                     error = self._get_error_message(driver, "//div[@class='errmsg-tip']//span")
                     reason = (
                         f"验证码识别失败: {error}"
