@@ -1563,9 +1563,10 @@ class DataFetcher:
                 time.sleep(self._step_wait)
             self._click_button(driver, By.XPATH, "//div[@class='el-tabs__nav is-top']/div[@id='tab-first']")
             time.sleep(self._step_wait)
-            # wait for data displayed
-            target = driver.find_element(By.CLASS_NAME, "total")
-            WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(EC.visibility_of(target))
+            # wait for data displayed：合并查找与等待，避免页面重渲染时 find_element 拿到旧元素或立即抛异常
+            WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(
+                EC.visibility_of_element_located((By.CLASS_NAME, "total"))
+            )
         except Exception as e:
             logging.error(f"获取年度数据失败: {e}")
             return None, None
@@ -1621,9 +1622,10 @@ class DataFetcher:
                 span_element = driver.find_element(By.XPATH, f"//span[text() = '{datetime.now().year - 1}']")
                 span_element.click()
                 time.sleep(self._step_wait)
-            # wait for month displayed
-            target = driver.find_element(By.CLASS_NAME, "total")
-            WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(EC.visibility_of(target))
+            # wait for month displayed：合并查找与等待，避免页面重渲染时 find_element 拿到旧元素或立即抛异常
+            WebDriverWait(driver, self.DRIVER_IMPLICITY_WAIT_TIME).until(
+                EC.visibility_of_element_located((By.CLASS_NAME, "total"))
+            )
             month_element = driver.find_element(By.XPATH, "//*[@id='pane-first']/div[1]/div[2]/div[2]/div/div[3]/table/tbody").text
             month_element = month_element.split("\n")
             month_element = [x for x in month_element if x != "MAX"]
