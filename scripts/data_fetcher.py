@@ -902,30 +902,80 @@ class DataFetcher:
         except Exception as e:
             logging.debug(f"写入会话户号失败: {e}")
 
+    SWITCH_USER_ATTEMPTS = 3
+
     def _switch_to_user(self, driver, user_id: str, userid_index: int = 0) -> bool:
-        """切换到指定户号（与 _get_user_ids 相同的 el-select 方式）"""
+        """切换到指定户号（与 _get_user_ids 相同的 el-select 方式）。
+
+        下拉框偶尔加载不出选项（0 个），此时刷新当前页面重试，最多 SWITCH_USER_ATTEMPTS 次。
+        """
         current = self._get_current_userid(driver)
         if current == user_id:
             logging.info(f"用户 [{user_id}] 已是当前选中用户, 无需切换")
             return True
 
+        for attempt in range(1, self.SWITCH_USER_ATTEMPTS + 1):
+            if attempt > 1:
+                logging.info(
+                    f"用户下拉框没有选项, 刷新页面后重试切换 [{user_id}] "
+                    f"(第 {attempt}/{self.SWITCH_USER_ATTEMPTS} 次)"
+                )
+                driver.refresh()
+                time.sleep(self._step_wait)
+                if self._get_current_userid(driver) == user_id:
+                    logging.info(f"用户 [{user_id}] 已是当前选中用户, 无需切换")
+                    return True
+            result = self._switch_to_user_once(driver, user_id, userid_index)
+            if result is not None:
+                if not result:
+                    self._save_debug_snapshot(driver, f"switch_{user_id}")
+                return result
+
+        logging.warning(f"切换用户 [{user_id}] 失败: 重试 {self.SWITCH_USER_ATTEMPTS} 次下拉框仍没有选项")
+        self._save_debug_snapshot(driver, f"switch_{user_id}")
+        return False
+
+    def _wait_user_options(self, driver, timeout: int):
+        """等待用户下拉选项出现（临时关闭隐式等待，避免空下拉框每次都等满隐式等待时间）。"""
+        driver.implicitly_wait(0)
+        try:
+            deadline = time.monotonic() + timeout
+            while True:
+                # 过滤掉年份选项（如 2024/2025/2026），只保留用户选项
+                options = [
+                    o for o in driver.find_elements(By.CSS_SELECTOR, ".el-select-dropdown__item")
+                    if not re.match(r"^\d{4}$", self._option_text(driver, o).strip())
+                ]
+                if options or time.monotonic() >= deadline:
+                    return options
+                time.sleep(1)
+        finally:
+            driver.implicitly_wait(self.DRIVER_IMPLICITY_WAIT_TIME)
+
+    def _switch_to_user_once(self, driver, user_id: str, userid_index: int):
+        """尝试切换一次。返回 True 成功；False 有选项但没切换成功；None 下拉框没有选项（可重试）。"""
         user_name = self._user_name_map.get(user_id, "")
 
         try:
+            # 关闭可能挡住页面的确认弹窗（与 _choose_current_userid 一致）
+            for btn in driver.find_elements(By.CLASS_NAME, "button_confirm"):
+                try:
+                    driver.execute_script("arguments[0].click();", btn)
+                    time.sleep(0.5)
+                except Exception:
+                    pass
+
             select_inputs = driver.find_elements(By.CSS_SELECTOR, ".houseNum .el-select .el-input__inner")
             if not select_inputs:
                 logging.warning("未找到 el-select 用户下拉框")
-                return False
+                return None
 
             driver.execute_script("arguments[0].click();", select_inputs[0])
             time.sleep(self._step_wait)
-            options = driver.find_elements(By.CSS_SELECTOR, ".el-select-dropdown__item")
-            # 过滤掉年份选项（如 2024/2025/2026），只保留用户选项
-            user_options = [
-                o for o in options
-                if not re.match(r"^\d{4}$", self._option_text(driver, o).strip())
-            ]
+            user_options = self._wait_user_options(driver, timeout=15)
             logging.info(f"用户下拉框共 {len(user_options)} 个用户选项")
+            if not user_options:
+                return None
 
             for opt in user_options:
                 text = self._option_text(driver, opt)
@@ -950,10 +1000,29 @@ class DataFetcher:
                     return True
 
             texts = [self._option_text(driver, o) for o in user_options]
-            logging.warning(f"切换用户 [{user_id}] 失败, 可选: {texts}")
+            logging.warning(
+                f"切换用户 [{user_id}] 失败, 当前户号={self._get_current_userid(driver) or '未知'}, "
+                f"索引={userid_index}, 可选: {texts}"
+            )
         except Exception as e:
             logging.warning(f"切换用户 [{user_id}] 异常: {e}")
         return False
+
+    def _save_debug_snapshot(self, driver, name: str) -> None:
+        """保存截图和页面源码，便于排查（保存在 data/errors/screenshots/ 下）。"""
+        try:
+            folder = ErrorWatcher.instance().screenshot_dir
+        except Exception:
+            return
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        base = os.path.join(folder, f"{name}_{stamp}")
+        try:
+            driver.save_screenshot(base + ".png")
+            with open(base + ".html", "w", encoding="utf-8") as f:
+                f.write(driver.page_source or "")
+            logging.warning(f"已保存排查用截图和页面源码: {base}.png / .html")
+        except Exception as e:
+            logging.warning(f"保存排查截图失败: {e}")
 
     def _choose_current_userid(self, driver, userid_index, user_id=None):
         """切换到指定用户，优先按户号匹配，失败则按索引"""
