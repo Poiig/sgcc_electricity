@@ -252,8 +252,8 @@ class SqliteDB(DB):
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id, month) DO UPDATE SET
                     user_name = CASE WHEN excluded.user_name != '' THEN excluded.user_name ELSE {self.MONTHLY_TABLE}.user_name END,
-                    total_usage = COALESCE(excluded.total_usage, {self.MONTHLY_TABLE}.total_usage),
-                    total_charge = COALESCE(excluded.total_charge, {self.MONTHLY_TABLE}.total_charge),
+                    total_usage = CASE WHEN excluded.total_usage > 0 THEN excluded.total_usage ELSE {self.MONTHLY_TABLE}.total_usage END,
+                    total_charge = CASE WHEN excluded.total_charge > 0 THEN excluded.total_charge ELSE {self.MONTHLY_TABLE}.total_charge END,
                     valley_usage = CASE WHEN excluded.valley_usage > 0 THEN excluded.valley_usage ELSE {self.MONTHLY_TABLE}.valley_usage END,
                     flat_usage = CASE WHEN excluded.flat_usage > 0 THEN excluded.flat_usage ELSE {self.MONTHLY_TABLE}.flat_usage END,
                     peak_usage = CASE WHEN excluded.peak_usage > 0 THEN excluded.peak_usage ELSE {self.MONTHLY_TABLE}.peak_usage END,
@@ -273,8 +273,8 @@ class SqliteDB(DB):
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id, year) DO UPDATE SET
                     user_name = CASE WHEN excluded.user_name != '' THEN excluded.user_name ELSE {self.YEARLY_TABLE}.user_name END,
-                    total_usage = COALESCE(excluded.total_usage, {self.YEARLY_TABLE}.total_usage),
-                    total_charge = COALESCE(excluded.total_charge, {self.YEARLY_TABLE}.total_charge),
+                    total_usage = CASE WHEN excluded.total_usage > 0 THEN excluded.total_usage ELSE {self.YEARLY_TABLE}.total_usage END,
+                    total_charge = CASE WHEN excluded.total_charge > 0 THEN excluded.total_charge ELSE {self.YEARLY_TABLE}.total_charge END,
                     valley_usage = CASE WHEN excluded.valley_usage > 0 THEN excluded.valley_usage ELSE {self.YEARLY_TABLE}.valley_usage END,
                     flat_usage = CASE WHEN excluded.flat_usage > 0 THEN excluded.flat_usage ELSE {self.YEARLY_TABLE}.flat_usage END,
                     peak_usage = CASE WHEN excluded.peak_usage > 0 THEN excluded.peak_usage ELSE {self.YEARLY_TABLE}.peak_usage END,
@@ -568,8 +568,8 @@ class MysqlDB(DB):
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE
                     user_name=CASE WHEN VALUES(user_name)!='' THEN VALUES(user_name) ELSE user_name END,
-                    total_usage=COALESCE(VALUES(total_usage), total_usage),
-                    total_charge=COALESCE(VALUES(total_charge), total_charge),
+                    total_usage=CASE WHEN VALUES(total_usage)>0 THEN VALUES(total_usage) ELSE total_usage END,
+                    total_charge=CASE WHEN VALUES(total_charge)>0 THEN VALUES(total_charge) ELSE total_charge END,
                     valley_usage=CASE WHEN VALUES(valley_usage)>0 THEN VALUES(valley_usage) ELSE valley_usage END,
                     flat_usage=CASE WHEN VALUES(flat_usage)>0 THEN VALUES(flat_usage) ELSE flat_usage END,
                     peak_usage=CASE WHEN VALUES(peak_usage)>0 THEN VALUES(peak_usage) ELSE peak_usage END,
@@ -588,8 +588,8 @@ class MysqlDB(DB):
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE
                     user_name=CASE WHEN VALUES(user_name)!='' THEN VALUES(user_name) ELSE user_name END,
-                    total_usage=COALESCE(VALUES(total_usage), total_usage),
-                    total_charge=COALESCE(VALUES(total_charge), total_charge),
+                    total_usage=CASE WHEN VALUES(total_usage)>0 THEN VALUES(total_usage) ELSE total_usage END,
+                    total_charge=CASE WHEN VALUES(total_charge)>0 THEN VALUES(total_charge) ELSE total_charge END,
                     valley_usage=CASE WHEN VALUES(valley_usage)>0 THEN VALUES(valley_usage) ELSE valley_usage END,
                     flat_usage=CASE WHEN VALUES(flat_usage)>0 THEN VALUES(flat_usage) ELSE flat_usage END,
                     peak_usage=CASE WHEN VALUES(peak_usage)>0 THEN VALUES(peak_usage) ELSE peak_usage END,
@@ -924,8 +924,8 @@ class PostgresqlDB(DB):
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (user_id, month) DO UPDATE SET
                     user_name = CASE WHEN EXCLUDED.user_name != '' THEN EXCLUDED.user_name ELSE {self.MONTHLY_TABLE}.user_name END,
-                    total_usage = COALESCE(EXCLUDED.total_usage, {self.MONTHLY_TABLE}.total_usage),
-                    total_charge = COALESCE(EXCLUDED.total_charge, {self.MONTHLY_TABLE}.total_charge),
+                    total_usage = CASE WHEN EXCLUDED.total_usage > 0 THEN EXCLUDED.total_usage ELSE {self.MONTHLY_TABLE}.total_usage END,
+                    total_charge = CASE WHEN EXCLUDED.total_charge > 0 THEN EXCLUDED.total_charge ELSE {self.MONTHLY_TABLE}.total_charge END,
                     valley_usage = CASE WHEN EXCLUDED.valley_usage > 0 THEN EXCLUDED.valley_usage ELSE {self.MONTHLY_TABLE}.valley_usage END,
                     flat_usage = CASE WHEN EXCLUDED.flat_usage > 0 THEN EXCLUDED.flat_usage ELSE {self.MONTHLY_TABLE}.flat_usage END,
                     peak_usage = CASE WHEN EXCLUDED.peak_usage > 0 THEN EXCLUDED.peak_usage ELSE {self.MONTHLY_TABLE}.peak_usage END,
@@ -945,8 +945,8 @@ class PostgresqlDB(DB):
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (user_id, year) DO UPDATE SET
                     user_name = CASE WHEN EXCLUDED.user_name != '' THEN EXCLUDED.user_name ELSE {self.YEARLY_TABLE}.user_name END,
-                    total_usage = COALESCE(EXCLUDED.total_usage, {self.YEARLY_TABLE}.total_usage),
-                    total_charge = COALESCE(EXCLUDED.total_charge, {self.YEARLY_TABLE}.total_charge),
+                    total_usage = CASE WHEN EXCLUDED.total_usage > 0 THEN EXCLUDED.total_usage ELSE {self.YEARLY_TABLE}.total_usage END,
+                    total_charge = CASE WHEN EXCLUDED.total_charge > 0 THEN EXCLUDED.total_charge ELSE {self.YEARLY_TABLE}.total_charge END,
                     valley_usage = CASE WHEN EXCLUDED.valley_usage > 0 THEN EXCLUDED.valley_usage ELSE {self.YEARLY_TABLE}.valley_usage END,
                     flat_usage = CASE WHEN EXCLUDED.flat_usage > 0 THEN EXCLUDED.flat_usage ELSE {self.YEARLY_TABLE}.flat_usage END,
                     peak_usage = CASE WHEN EXCLUDED.peak_usage > 0 THEN EXCLUDED.peak_usage ELSE {self.YEARLY_TABLE}.peak_usage END,
