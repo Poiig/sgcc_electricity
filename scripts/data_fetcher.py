@@ -53,8 +53,12 @@ class DataFetcher:
         self.IGNORE_USER_ID = [uid.strip() for uid in os.getenv("IGNORE_USER_ID", "xxxxx,xxxxx").split(",") if uid.strip()]
         self.QR_CODE_LOGIN_WAIT_COUNT = int(os.getenv("QR_CODE_LOGIN_WAIT_COUNT", 7))
         self.QR_CODE_LOGIN_WAIT_TIME_INTERVAL_UNIT = int(os.getenv("QR_CODE_LOGIN_WAIT_TIME_INTERVAL_UNIT", 10))
-        # 用户名映射: 由 _get_user_ids 从网站下拉框自动填充
-        self._user_name_map = {}
+        # 用户名映射: 优先使用 USER_NAMES 手动配置，未配置的户号再由 _get_user_ids 从网站自动填充
+        self._user_name_map = self._parse_user_names(os.getenv("USER_NAMES", ""))
+        if self._user_name_map:
+            logging.info(f"已从 USER_NAMES 加载 {len(self._user_name_map)} 个户号名称: {self._user_name_map}")
+        # 户号 -> 网站下拉框选项原文，切换户号时按原文匹配（USER_NAMES 的自定义名称不会出现在下拉框里）
+        self._option_label_map = {}
         # 本地运行用更短的步骤等待
         self._step_wait = 2 if 'PYTHON_IN_DOCKER' not in os.environ else self.RETRY_WAIT_TIME_OFFSET_UNIT
         logging.info(f"数据抓取器初始化完成: 用户={username}, 步骤等待={self._step_wait}s, "
@@ -652,6 +656,19 @@ class DataFetcher:
 
         return False
         
+    @staticmethod
+    def _parse_user_names(raw: str) -> dict:
+        """解析 USER_NAMES：「户号:名称,户号:名称」，忽略空项和格式不对的项，户号和名称两侧的空格、引号会被去掉。"""
+        result = {}
+        for pair in (raw or "").strip().strip('"\'').split(","):
+            if ":" not in pair:
+                continue
+            uid, name = pair.split(":", 1)
+            uid, name = uid.strip().strip('"\''), name.strip().strip('"\'')
+            if uid and name:
+                result[uid] = name
+        return result
+
     def fetch(self):
 
         """main logic here"""
@@ -959,6 +976,8 @@ class DataFetcher:
 
     def _switch_to_user_once(self, driver, user_id: str, userid_index: int):
         """尝试切换一次。返回 True 成功；False 有选项但没切换成功；None 下拉框没有选项（可重试）。"""
+        # 优先按下拉框选项原文匹配；USER_NAMES 的自定义名称不会出现在下拉框里
+        option_label = self._option_label_map.get(user_id, "")
         user_name = self._user_name_map.get(user_id, "")
 
         try:
@@ -990,11 +1009,15 @@ class DataFetcher:
                     if self._get_current_userid(driver) == user_id:
                         logging.info(f"已切换到用户 [{user_id}]")
                         return True
-                if user_name and user_name in text:
+                if option_label:
+                    matched = text.strip() == option_label.strip()
+                else:
+                    matched = bool(user_name) and user_name in text
+                if matched:
                     driver.execute_script("arguments[0].click();", opt)
                     time.sleep(self._step_wait)
                     if self._get_current_userid(driver) == user_id:
-                        logging.info(f"已切换到用户 [{user_id}] ({user_name})")
+                        logging.info(f"已切换到用户 [{user_id}] ({user_name or text})")
                         return True
 
             if 0 <= userid_index < len(user_options):
@@ -1529,6 +1552,7 @@ class DataFetcher:
                         if matches:
                             uid = matches[-1]
                             userid_list.append(uid)
+                            self._option_label_map[uid] = el_text
                             # 从文本中提取用户名（格式如 "户号:用户名" 或 "户号 用户名"）
                             name = el_text.replace(uid, "").strip().lstrip(":").strip()
                             if name and uid not in self._user_name_map:
@@ -1567,6 +1591,8 @@ class DataFetcher:
                             current_id = self._get_current_userid(driver)
                             if current_id and current_id not in userid_list:
                                 userid_list.append(current_id)
+                                if text:
+                                    self._option_label_map[current_id] = text
                                 if text and current_id not in self._user_name_map:
                                     self._user_name_map[current_id] = text
                                 logging.info(f"从 el-select 获取到用户: {current_id} ({text})")
