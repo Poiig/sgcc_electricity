@@ -115,6 +115,7 @@ def reload_env() -> dict:
         "path": str(get_env_file_path()),
         "restart_required_keys": [
             "JOB_START_TIME",
+            "REPUBLISH_INTERVAL_MINUTES",
             "WEB_DASHBOARD_PORT",
             "WEB_DASHBOARD_PASSWORD",
             "RUN_ON_STARTUP",

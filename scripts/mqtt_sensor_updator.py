@@ -13,6 +13,8 @@ class MQTTSensorUpdator:
 
     def __init__(self):
         self.mqtt_client = MQTTDiscoveryClient()
+        # 缓存重推时为 True：传感器数值等详情只打 DEBUG，INFO 只保留成功摘要
+        self._quiet = False
         self._init_balance_notify()
 
     def _init_balance_notify(self):
@@ -29,6 +31,13 @@ class MQTTSensorUpdator:
         else:
             self.balance_notify = None
 
+    def _detail(self, msg: str, *args) -> None:
+        """传感器数值等明细日志：缓存重推时降为 DEBUG，正式抓取仍为 INFO。"""
+        if self._quiet:
+            logging.debug(msg, *args)
+        else:
+            logging.info(msg, *args)
+
     @staticmethod
     def _sensor_name(base: str, postfix: str) -> str:
         return base + postfix
@@ -40,12 +49,12 @@ class MQTTSensorUpdator:
     def _log_skip(self, base: str, postfix: str):
         name = self._sensor_name(base, postfix)
         label = self._sensor_label(base)
-        logging.info("跳过更新 %s 【%s】，状态一致", label, name)
+        self._detail("跳过更新 %s 【%s】，状态一致", label, name)
 
     def _log_updated(self, base: str, postfix: str, value, unit: str):
         name = self._sensor_name(base, postfix)
         label = self._sensor_label(base)
-        logging.info("%s 【%s】 已更新: %s %s", label, name, value, unit)
+        self._detail("%s 【%s】 已更新: %s %s", label, name, value, unit)
 
     def _publish_sensor(
         self,
@@ -103,7 +112,7 @@ class MQTTSensorUpdator:
         user_name: str = "",
         notify=True,
     ):
-        logging.info("[%s] 开始通过 MQTT 更新 Home Assistant 数据...", user_id)
+        self._detail("[%s] 开始通过 MQTT 更新 Home Assistant 数据...", user_id)
         self._save_to_cache(
             user_id, balance, last_daily_date, last_daily_usage,
             yearly_charge, yearly_usage, month_charge, month_usage,
@@ -133,7 +142,7 @@ class MQTTSensorUpdator:
         if enhanced_balance and enhanced_balance.get("amount_due") is not None:
             self.update_prepay_balance(postfix, enhanced_balance["amount_due"], user_id, user_name)
 
-        logging.info("[%s] MQTT 数据更新完成", user_id)
+        self._detail("[%s] MQTT 数据更新完成", user_id)
 
     # ------------------------------------------------------------------
     # 缓存
@@ -184,6 +193,7 @@ class MQTTSensorUpdator:
             logging.error("保存缓存文件失败 %s: %s", cache_file, e)
 
     def republish(self):
+        """从本地缓存重推 HA 传感器。INFO 只报成功摘要，明细需 DEBUG。"""
         cache_file = self._get_cache_file()
         if not os.path.exists(cache_file):
             logging.info("未找到缓存文件 %s，跳过恢复", os.path.abspath(cache_file))
@@ -197,15 +207,19 @@ class MQTTSensorUpdator:
             logging.error("加载缓存文件失败: %s", e)
             return False
 
+        self._quiet = True
         try:
             for user_id, values in data.items():
-                logging.info("从缓存恢复户号 %s 的数据", user_id)
+                logging.debug("从缓存恢复户号 %s 的数据", user_id)
                 clean_values = {k: v for k, v in values.items() if k != 'timestamp'}
                 self.update_one_userid(user_id, **clean_values, notify=False)
+            logging.info("缓存重推成功（%s 个户号）", len(data))
             return True
         except Exception as e:
             logging.error("从缓存恢复数据失败: %s", e)
             return False
+        finally:
+            self._quiet = False
 
     # ------------------------------------------------------------------
     # 数据库查询
@@ -219,7 +233,7 @@ class MQTTSensorUpdator:
         from db import create_db
         db = create_db()
         if db is None:
-            logging.info("[%s] 未配置数据库 (DB_TYPE=none)，跳过当月分时传感器更新", user_id)
+            self._detail("[%s] 未配置数据库 (DB_TYPE=none)，跳过当月分时传感器更新", user_id)
             return None
         if not db.connect_user_db(user_id):
             logging.warning("[%s] 数据库连接失败，无法查询当月分时电量", user_id)
@@ -324,10 +338,10 @@ class MQTTSensorUpdator:
         if not summary:
             summary = self._query_month_tou_from_db(user_id, target_month)
         if not summary:
-            logging.info("[%s] 数据库中无 %s 月日用电分时数据，跳过谷/平/峰/尖更新", user_id, target_month)
+            self._detail("[%s] 数据库中无 %s 月日用电分时数据，跳过谷/平/峰/尖更新", user_id, target_month)
             return
 
-        logging.info(
+        self._detail(
             "[%s] %s 月分时（数据库日用电汇总 %s 天）: 谷=%s, 平=%s, 峰=%s, 尖=%s kWh",
             user_id, target_month, summary['day_count'],
             summary['valley_usage'], summary['flat_usage'],
@@ -350,7 +364,7 @@ class MQTTSensorUpdator:
                 user_id=user_id, user_name=user_name, icon="mdi:lightning-bolt",
                 last_reset=target_month,
             )
-            logging.info("%s 【%s】 已更新: %s kWh", label, sensor_name, value)
+            self._detail("%s 【%s】 已更新: %s kWh", label, sensor_name, value)
 
     def _update_step_sensors(self, postfix, step_data, user_id, user_name=""):
         """更新阶梯用电传感器（仅住宅用户有数据）"""
@@ -376,7 +390,7 @@ class MQTTSensorUpdator:
                 user_id=user_id, user_name=user_name, icon="mdi:stairs",
                 attributes={"year_month": year_month},
             )
-            logging.info("%s 【%s】 已更新: %s kWh", label, sensor_name, value)
+            self._detail("%s 【%s】 已更新: %s kWh", label, sensor_name, value)
 
         if step_data.get("step_stage") is not None:
             stage = int(step_data.get("step_stage") or 1)
@@ -389,4 +403,4 @@ class MQTTSensorUpdator:
                 user_id=user_id, user_name=user_name, icon="mdi:stairs",
                 attributes={"year_month": year_month},
             )
-            logging.info("%s 【%s】 已更新: 第%s阶段", label, sensor_name, stage)
+            self._detail("%s 【%s】 已更新: 第%s阶段", label, sensor_name, stage)

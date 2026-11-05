@@ -15,6 +15,8 @@ class SensorUpdator:
         HASS_TOKEN = os.getenv("HASS_TOKEN")
         self.base_url = HASS_URL[:-1] if HASS_URL.endswith("/") else HASS_URL
         self.token = HASS_TOKEN
+        # 缓存重推时为 True：传感器数值等详情只打 DEBUG，INFO 只保留成功摘要
+        self._quiet = False
         self._init_balance_notify()
 
     def _init_balance_notify(self):
@@ -31,6 +33,13 @@ class SensorUpdator:
         else:
             self.balance_notify = None
 
+    def _detail(self, msg: str, *args) -> None:
+        """传感器数值等明细日志：缓存重推时降为 DEBUG，正式抓取仍为 INFO。"""
+        if self._quiet:
+            logging.debug(msg, *args)
+        else:
+            logging.info(msg, *args)
+
     @staticmethod
     def _sensor_name(base: str, postfix: str) -> str:
         return base + postfix
@@ -42,15 +51,15 @@ class SensorUpdator:
     def _log_skip(self, base: str, postfix: str):
         name = self._sensor_name(base, postfix)
         label = self._sensor_label(base)
-        logging.info(f"跳过更新 {label} 【{name}】，状态一致")
+        self._detail("跳过更新 %s 【%s】，状态一致", label, name)
 
     def _log_updated(self, base: str, postfix: str, value, unit: str):
         name = self._sensor_name(base, postfix)
         label = self._sensor_label(base)
-        logging.info(f"{label} 【{name}】 已更新: {value} {unit}")
+        self._detail("%s 【%s】 已更新: %s %s", label, name, value, unit)
 
     def update_one_userid(self, user_id: str, balance: float, last_daily_date: str, last_daily_usage: float, yearly_charge: float, yearly_usage: float, month_charge: float, month_usage: float, tou_data: dict = None, enhanced_balance: dict = None, step_data: dict = None, user_name: str = "", notify=True):
-        logging.info(f"[{user_id}] 开始更新 Home Assistant 数据...")
+        self._detail("[%s] 开始更新 Home Assistant 数据...", user_id)
         self._save_to_cache(user_id, balance, last_daily_date, last_daily_usage, yearly_charge, yearly_usage, month_charge, month_usage, tou_data, enhanced_balance, step_data=step_data, user_name=user_name)
         postfix = f"_{user_id[-4:]}"
         if balance is not None:
@@ -76,7 +85,7 @@ class SensorUpdator:
         if enhanced_balance and enhanced_balance.get("amount_due") is not None:
             self.update_prepay_balance(postfix, enhanced_balance["amount_due"])
 
-        logging.info(f"[{user_id}] Home Assistant 数据更新完成")
+        self._detail("[%s] Home Assistant 数据更新完成", user_id)
 
     def _get_cache_file(self):
         from const import get_data_dir
@@ -136,15 +145,19 @@ class SensorUpdator:
             logging.error(f"加载缓存文件失败 {abs_cache_file}: {e}")
             return False
 
+        self._quiet = True
         try:
             for user_id, values in data.items():
-                logging.info(f"从缓存恢复户号 {user_id} 的数据")
+                logging.debug("从缓存恢复户号 %s 的数据", user_id)
                 clean_values = {k: v for k, v in values.items() if k != 'timestamp'}
                 self.update_one_userid(user_id, **clean_values, notify=False)
+            logging.info("缓存重推成功（%s 个户号）", len(data))
             return True
         except Exception as e:
-            logging.error(f"从缓存恢复数据失败: {e}")
+            logging.error("从缓存恢复数据失败: %s", e)
             return False
+        finally:
+            self._quiet = False
 
     @staticmethod
     def _current_month_key() -> str:
@@ -155,10 +168,10 @@ class SensorUpdator:
         from db import create_db
         db = create_db()
         if db is None:
-            logging.info(f"[{user_id}] 未配置数据库 (DB_TYPE=none)，跳过当月分时传感器更新")
+            self._detail("[%s] 未配置数据库 (DB_TYPE=none)，跳过当月分时传感器更新", user_id)
             return None
         if not db.connect_user_db(user_id):
-            logging.warning(f"[{user_id}] 数据库连接失败，无法查询当月分时电量")
+            logging.warning("[%s] 数据库连接失败，无法查询当月分时电量", user_id)
             return None
         try:
             return db.query_month_tou_from_daily(user_id, month)
@@ -332,13 +345,14 @@ class SensorUpdator:
         if not summary:
             summary = self._query_month_tou_from_db(user_id, target_month)
         if not summary:
-            logging.info(f"[{user_id}] 数据库中无 {target_month} 月日用电分时数据，跳过谷/平/峰/尖更新")
+            self._detail("[%s] 数据库中无 %s 月日用电分时数据，跳过谷/平/峰/尖更新", user_id, target_month)
             return
 
-        logging.info(
-            f"[{user_id}] {target_month} 月分时（数据库日用电汇总 {summary['day_count']} 天）: "
-            f"谷={summary['valley_usage']}, 平={summary['flat_usage']}, "
-            f"峰={summary['peak_usage']}, 尖={summary['tip_usage']} kWh"
+        self._detail(
+            "[%s] %s 月分时（数据库日用电汇总 %s 天）: 谷=%s, 平=%s, 峰=%s, 尖=%s kWh",
+            user_id, target_month, summary["day_count"],
+            summary["valley_usage"], summary["flat_usage"],
+            summary["peak_usage"], summary["tip_usage"],
         )
 
         tou_fields = [
@@ -354,7 +368,7 @@ class SensorUpdator:
             label = self._sensor_label(sensor_base)
 
             if not self._should_push(sensorName, value, {"last_reset": last_reset}):
-                logging.info(f"跳过更新 {label} 【{sensorName}】，状态一致")
+                self._detail("跳过更新 %s 【%s】，状态一致", label, sensorName)
                 continue
 
             request_body = {
@@ -370,7 +384,7 @@ class SensorUpdator:
                 },
             }
             self.send_url(sensorName, request_body)
-            logging.info(f"{label} 【{sensorName}】 已更新: {value} kWh")
+            self._detail("%s 【%s】 已更新: %s kWh", label, sensorName, value)
 
     def _update_step_sensors(self, postfix: str, step_data: dict):
         """更新阶梯用电传感器（仅住宅用户有数据）"""
@@ -393,7 +407,7 @@ class SensorUpdator:
             sensorName = self._sensor_name(sensor_base, postfix)
             label = self._sensor_label(sensor_base)
             if not self._should_push(sensorName, value, check_attrs):
-                logging.info(f"跳过更新 {label} 【{sensorName}】，状态一致")
+                self._detail("跳过更新 %s 【%s】，状态一致", label, sensorName)
                 continue
             request_body = {
                 "state": value,
@@ -408,7 +422,7 @@ class SensorUpdator:
                 },
             }
             self.send_url(sensorName, request_body)
-            logging.info(f"{label} 【{sensorName}】 已更新: {value} {unit}")
+            self._detail("%s 【%s】 已更新: %s %s", label, sensorName, value, unit)
 
         if step_data.get("step_stage") is not None:
             stage = int(step_data.get("step_stage") or 1)
@@ -416,7 +430,7 @@ class SensorUpdator:
             sensorName = self._sensor_name(sensor_base, postfix)
             label = self._sensor_label(sensor_base)
             if not self._should_push(sensorName, stage, check_attrs):
-                logging.info(f"跳过更新 {label} 【{sensorName}】，状态一致")
+                self._detail("跳过更新 %s 【%s】，状态一致", label, sensorName)
             else:
                 request_body = {
                     "state": stage,
@@ -429,7 +443,7 @@ class SensorUpdator:
                     },
                 }
                 self.send_url(sensorName, request_body)
-                logging.info(f"{label} 【{sensorName}】 已更新: 第{stage}阶段")
+                self._detail("%s 【%s】 已更新: 第%s阶段", label, sensorName, stage)
 
     def update_prepay_balance(self, postfix: str, sensorState: float):
         base = PREPAY_BALANCE_SENSOR_NAME

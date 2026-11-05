@@ -32,6 +32,7 @@ https://github.com/Poiig/sgcc_electricity
 | mqtt_host | MQTT Broker 地址（MQTT 方式） | 选填 |
 | mqtt_port | MQTT 端口 | 1883 |
 | job_start_time | 每天同步开始时间 | `07:00` |
+| republish_interval_minutes | 缓存重推 HA 间隔（分钟，0=禁用） | `10` |
 | db_type | 数据库类型（sqlite / mysql / postgresql） | sqlite |
 | data_retention_days | 数据保留天数 | 365 |
 | daily_fetch_days | 每日获取天数 | 7 |

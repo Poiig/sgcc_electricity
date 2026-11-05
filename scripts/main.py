@@ -105,9 +105,17 @@ def main():
     schedule.every().day.at(parsed_time.strftime("%H:%M")).do(run_task, fetcher)
     schedule.every().day.at(next_run_time.strftime("%H:%M")).do(run_task, fetcher)
     
-    # 每5分钟重发一次数据，防止HA重启后数据丢失
+    # 定时从缓存重推 HA 数据，防止 HA 重启后传感器丢失（默认 10 分钟，0=禁用）
     if updator:
-        schedule.every(5).minutes.do(updator.republish)
+        try:
+            republish_interval = int(os.getenv("REPUBLISH_INTERVAL_MINUTES", "10").strip() or "10")
+        except ValueError:
+            republish_interval = 10
+        if republish_interval > 0:
+            schedule.every(republish_interval).minutes.do(updator.republish)
+            logging.info("缓存重推已启用，每 %s 分钟一次（REPUBLISH_INTERVAL_MINUTES）", republish_interval)
+        else:
+            logging.info("缓存重推已禁用（REPUBLISH_INTERVAL_MINUTES=0）")
     
     # 启动时抓取策略：
     # RUN_ON_STARTUP=true  → 立即登录抓取（Docker 调试/首次部署推荐）

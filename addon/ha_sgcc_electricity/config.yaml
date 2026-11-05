@@ -27,6 +27,7 @@ options:
   mqtt_device_id: "ha_sgcc_electricity"
   mqtt_device_name: "国家电网电费数据"
   job_start_time: "07:00"
+  republish_interval_minutes: 10
   run_on_startup: false
   captcha_solver: "local"
   llm_api_key: ""
@@ -57,6 +58,7 @@ schema:
   mqtt_device_id: str?
   mqtt_device_name: str?
   job_start_time: str
+  republish_interval_minutes: int(0,1440)?
   run_on_startup: bool
   captcha_solver: list(local|llm)
   llm_api_key: password?
