@@ -321,6 +321,39 @@ def _push_wework_login_text(webhook: str, reason: str, tip: str = "") -> bool:
     return _post_wework(webhook, {"msgtype": "markdown", "markdown": {"content": content}})
 
 
+def push_fetch_fail_alert(payload: dict) -> bool:
+    """连续多日抓取失败告警（企微 markdown；无 webhook 则跳过）。"""
+    _ensure_env_loaded()
+    webhook = os.getenv("WEWORK_WEBHOOK_URL", "").strip()
+    if not webhook:
+        logging.info("未配置 WEWORK_WEBHOOK_URL，跳过抓取失败告警")
+        return False
+
+    streak = payload.get("streak") or 0
+    threshold = payload.get("threshold") or 0
+    last_ok = payload.get("last_success_date") or "无记录"
+    last_ok_at = payload.get("last_success_at") or ""
+    last_error = (payload.get("last_error") or "").strip() or "未知"
+    reasons = payload.get("reasons") or []
+
+    reason_lines = "\n".join(f"> · {r}" for r in reasons[:5]) or f"> · {last_error}"
+    last_ok_line = last_ok if not last_ok_at else f"{last_ok}（{last_ok_at}）"
+    content = (
+        "**国家电网同步失败告警**\n"
+        f"> 已连续 <font color=\"warning\">{streak}</font> 天未成功"
+        f"（阈值 {threshold} 天）\n"
+        f"> 最近成功：<font color=\"comment\">{last_ok_line}</font>\n"
+        f"> 最近错误：<font color=\"warning\">{last_error}</font>\n"
+        "> 近期失败原因：\n"
+        f"{reason_lines}\n"
+        "> 请检查验证码/登录、容器日志或 Web 控制台后手动同步"
+    )
+    ok = _post_wework(webhook, {"msgtype": "markdown", "markdown": {"content": content}})
+    if ok:
+        logging.info("已推送抓取失败告警到企业微信（连续 %s 天）", streak)
+    return ok
+
+
 def push_login_need_scan(reason: str = "", tip: str = "正在获取登录二维码，稍后将推送图片") -> bool:
     """在拿到二维码图片之前先发文字提醒，避免取图失败时完全无通知。"""
     _ensure_env_loaded()

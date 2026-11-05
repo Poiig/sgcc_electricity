@@ -172,11 +172,18 @@ def _register_routes(router: APIRouter) -> None:
             if elapsed < cooldown * 60:
                 can_fetch = False
                 state = {**state, "cooldown_remaining_sec": int(cooldown * 60 - elapsed)}
+        try:
+            from fetch_health import health_summary
+
+            fetch_health = health_summary()
+        except Exception:
+            fetch_health = {}
         return {
             "db_type": os.getenv("DB_TYPE", "sqlite"),
             "db_enabled": is_db_enabled(),
             "db_available": db_available(),
             "fetch": state,
+            "fetch_health": fetch_health,
             "can_fetch": can_fetch and not is_fetch_running(),
             "cooldown_minutes": cooldown,
             "last_sync_at": _format_ts(state.get("last_success_at") or state.get("finished_at") or last_ts),

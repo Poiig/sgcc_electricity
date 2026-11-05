@@ -116,6 +116,15 @@ def main():
             logging.info("缓存重推已启用，每 %s 分钟一次（REPUBLISH_INTERVAL_MINUTES）", republish_interval)
         else:
             logging.info("缓存重推已禁用（REPUBLISH_INTERVAL_MINUTES=0）")
+
+    # 日终巡检：当天仍未成功且连续失败达阈值则推送告警（默认 22:30）
+    health_check_at = os.getenv("FETCH_HEALTH_CHECK_TIME", "22:30").strip() or "22:30"
+    try:
+        datetime.strptime(health_check_at, "%H:%M")
+        schedule.every().day.at(health_check_at).do(run_fetch_health_check)
+        logging.info("抓取健康巡检已启用，每天 %s（FETCH_HEALTH_CHECK_TIME）", health_check_at)
+    except ValueError:
+        logging.warning("FETCH_HEALTH_CHECK_TIME=%s 无效，跳过日终巡检", health_check_at)
     
     # 启动时抓取策略：
     # RUN_ON_STARTUP=true  → 立即登录抓取（Docker 调试/首次部署推荐）
@@ -143,15 +152,32 @@ def run_task(data_fetcher: DataFetcher):
         if not acquired:
             logging.warning("跳过定时同步：已有抓取任务正在运行")
             return
+        last_error = ""
         for retry_times in range(1, RETRY_TIMES_LIMIT + 1):
             try:
                 data_fetcher.fetch()
                 mark_fetch_finished(True, "定时同步完成")
                 return
             except Exception as e:
-                logging.error(f"数据同步任务失败: [{e}]，剩余重试次数 {RETRY_TIMES_LIMIT - retry_times}")
+                last_error = str(e).strip() or e.__class__.__name__
+                logging.error(
+                    "数据同步任务失败: [%s]，剩余重试次数 %s",
+                    last_error,
+                    RETRY_TIMES_LIMIT - retry_times,
+                )
                 continue
-        mark_fetch_finished(False, "定时同步重试次数已用尽")
+        reason = last_error or "未知错误"
+        mark_fetch_finished(False, f"定时同步失败（重试耗尽）: {reason}")
+
+
+def run_fetch_health_check():
+    """日终检查当日是否已成功同步，连续失败则告警。"""
+    try:
+        from fetch_health import check_daily_health
+
+        check_daily_health()
+    except Exception as exc:
+        logging.warning("抓取健康巡检失败（非致命）: %s", exc)
 
 def logger_init(level: str):
     logger = logging.getLogger()

@@ -164,6 +164,9 @@ Docker Compose 方式通过 `.env` 文件配置，完整配置项见 `example.en
 |------|--------|------|
 | `JOB_START_TIME` | `09:30` | 每天同步开始时间（程序会在该时间及 +12 小时各执行一次） |
 | `REPUBLISH_INTERVAL_MINUTES` | `10` | 从缓存重推 HA 传感器间隔（分钟），`0` 禁用；INFO 只报成功，明细需 `LOG_LEVEL=DEBUG` |
+| `FETCH_FAIL_ALERT` | `true` | 连续多日抓取失败时推送企微告警（需 `WEWORK_WEBHOOK_URL`） |
+| `FETCH_FAIL_ALERT_DAYS` | `2` | 连续失败自然日达到该天数后告警，告警含近期失败原因 |
+| `FETCH_HEALTH_CHECK_TIME` | `22:30` | 日终巡检时刻：当天仍未成功则按阈值告警 |
 | `RUN_ON_STARTUP` | `false` | Docker 启动后立即登录抓取 |
 | `CAPTCHA_SOLVER` | `local` | 验证码识别（推荐 `llm`，详见下方说明） |
 | `DB_TYPE` | sqlite | 数据库类型（sqlite / mysql / postgresql） |

@@ -41,6 +41,9 @@ options:
   push_url: ""
   wework_webhook_url: ""
   push_qrcode_url: ""
+  fetch_fail_alert: true
+  fetch_fail_alert_days: 2
+  fetch_health_check_time: "22:30"
 schema:
   phone_number: str
   password: password
@@ -72,3 +75,6 @@ schema:
   push_url: str?
   wework_webhook_url: str?
   push_qrcode_url: str?
+  fetch_fail_alert: bool?
+  fetch_fail_alert_days: int(1,30)?
+  fetch_health_check_time: str?

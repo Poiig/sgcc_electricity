@@ -71,11 +71,13 @@ def mark_fetch_finished(success: bool, message: str = "") -> None:
     prev = read_fetch_state()
     finished = time.time()
     last_success = finished if success else prev.get("last_success_at")
+    msg = message or ("同步完成" if success else "同步失败")
+    source = prev.get("source", "")
     write_fetch_state(
         {
             "status": "success" if success else "failed",
-            "source": prev.get("source", ""),
-            "message": message or ("同步完成" if success else "同步失败"),
+            "source": source,
+            "message": msg,
             "started_at": prev.get("started_at"),
             "finished_at": finished,
             "last_success_at": last_success,
@@ -85,13 +87,22 @@ def mark_fetch_finished(success: bool, message: str = "") -> None:
     write_fetch_state(
         {
             "status": "idle",
-            "source": prev.get("source", ""),
-            "message": message or ("同步完成" if success else "同步失败"),
+            "source": source,
+            "message": msg,
             "started_at": prev.get("started_at"),
             "finished_at": finished,
             "last_success_at": last_success,
         }
     )
+    # 落盘每日成败并在连续多日失败时推送告警
+    try:
+        from fetch_health import record_fetch_result
+
+        record_fetch_result(success, message=msg, source=source)
+    except Exception as exc:
+        import logging
+
+        logging.warning("更新抓取健康记录失败（非致命）: %s", exc)
 
 
 def is_fetch_running() -> bool:
