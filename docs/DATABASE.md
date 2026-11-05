@@ -2,7 +2,7 @@
 
 启用数据库（`DB_TYPE=sqlite` 或 `mysql`）后，程序自动创建以下 5 张表。
 
-> 所有表均包含 `user_id` 和 `user_name`（自动从网站获取）字段，`user_name` 会在每次更新时自动补充。
+> 所有表均包含 `user_id` 和 `user_name` 字段。`user_name` 优先取自 `USER_NAMES` 自定义配置，未配置时从国网网站获取，并在每次更新时自动补充。
 
 ---
 
@@ -12,7 +12,7 @@
 |------|------|------|
 | user_id | TEXT | 用户户号（主键） |
 | phone_number | TEXT | 登录手机号 |
-| user_name | TEXT | 用户名（自动从网站获取） |
+| user_name | TEXT | 用户名（`USER_NAMES` 优先，否则从网站获取） |
 | created_at | DATETIME | 创建时间 |
 | updated_at | DATETIME | 更新时间 |
 
@@ -96,7 +96,7 @@
 
 ## `step_usage` — 阶梯用电量
 
-> 仅住宅用户有阶梯用电数据，充电桩用户无阶梯信息。
+> 仅显示名称含「住宅」的户号有阶梯用电数据；充电桩等无阶梯信息。网站户名不含「住宅」时，可用 `USER_NAMES` 自定义名称启用。
 
 主键：`(user_id, year_month)` — **每个户号每月一条记录**。同步时 `year_month` 取当前自然月（`YYYY-MM`），同月内多次同步更新同一行；跨月后写入新行，旧月数据保留作历史。
 

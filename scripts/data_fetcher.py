@@ -55,6 +55,8 @@ class DataFetcher:
         self.QR_CODE_LOGIN_WAIT_TIME_INTERVAL_UNIT = int(os.getenv("QR_CODE_LOGIN_WAIT_TIME_INTERVAL_UNIT", 10))
         # 用户名映射: 优先使用 USER_NAMES 手动配置，未配置的户号再由 _get_user_ids 从网站自动填充
         self._user_name_map = self._parse_user_names(os.getenv("USER_NAMES", ""))
+        # 记录来自 USER_NAMES 的户号，热重载时用于区分「删配置」与「网站自动填充」
+        self._user_names_from_config = set(self._user_name_map.keys())
         if self._user_name_map:
             logging.info(f"已从 USER_NAMES 加载 {len(self._user_name_map)} 个户号名称: {self._user_name_map}")
         # 户号 -> 网站下拉框选项原文，切换户号时按原文匹配（USER_NAMES 的自定义名称不会出现在下拉框里）
@@ -80,6 +82,12 @@ class DataFetcher:
         self.IGNORE_USER_ID = [
             uid.strip() for uid in os.getenv("IGNORE_USER_ID", "").split(",") if uid.strip()
         ]
+        # USER_NAMES 变更：新配置覆盖；从配置中移除的户号清掉自定义名，下次抓取再从网站补
+        new_user_names = self._parse_user_names(os.getenv("USER_NAMES", ""))
+        for uid in self._user_names_from_config - set(new_user_names):
+            self._user_name_map.pop(uid, None)
+        self._user_name_map.update(new_user_names)
+        self._user_names_from_config = set(new_user_names.keys())
         self.QR_CODE_LOGIN_WAIT_COUNT = int(
             os.getenv("QR_CODE_LOGIN_WAIT_COUNT", self.QR_CODE_LOGIN_WAIT_COUNT)
         )
@@ -92,10 +100,11 @@ class DataFetcher:
             self.db_type = new_db_type
             self._init_db()
         logging.info(
-            "DataFetcher 配置已热重载: 用户=%s, CAPTCHA_SOLVER=%s, DB=%s",
+            "DataFetcher 配置已热重载: 用户=%s, CAPTCHA_SOLVER=%s, DB=%s, USER_NAMES=%s",
             self._username,
             self._captcha_solver,
             self.db_type,
+            len(self._user_names_from_config),
         )
     
     def _init_db(self):
