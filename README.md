@@ -169,6 +169,7 @@ Docker Compose 方式通过 `.env` 文件配置，完整配置项见 `example.en
 | `LOGIN_METHOD` | password | 登录方式（password / qrcode） |
 | `LOGIN_FALLBACK` | qrcode | 登录失败备选（qrcode / none） |
 | `IGNORE_USER_ID` | 空 | 忽略的户号（逗号分隔） |
+| `USER_NAMES` | 空 | 户号名称，如 `户号1:我家住宅,户号2:充电桩`；未配置时从国网网站获取。名称含「住宅」的户号才会抓取阶梯用电 |
 | `WEB_DASHBOARD` | true | 启用 Web 控制台 |
 | `PUSH_TYPE` | none | 通知方式（none / pushplus / urlpush / wework） |
 | `DATA_RETENTION_DAYS` | 365 | 数据库记录保留天数，0 表示永久保留 |

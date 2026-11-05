@@ -14,6 +14,7 @@ options:
   phone_number: ""
   password: ""
   ignore_user_id: ""
+  user_names: ""
   db_type: "sqlite"
   hass_url: "http://homeassistant:8123/"
   hass_token: ""
@@ -43,6 +44,7 @@ schema:
   phone_number: str
   password: password
   ignore_user_id: str?
+  user_names: str?
   db_type: list(sqlite|mysql|postgresql)
   hass_url: str
   hass_token: password?
