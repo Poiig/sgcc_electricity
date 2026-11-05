@@ -6,12 +6,10 @@
 - **`USER_NAMES` 户号自定义名称**：多户号可配置显示名（通知 / Web / DB / HA）；名称含「住宅」可启用阶梯用电抓取（网站户名不含「住宅」时的绕过方式）
 - Web 控制台修改 `.env` 后热更新 `USER_NAMES`（移除配置的户号会清掉自定义名，下次抓取再从网站补）
 - **`REPUBLISH_INTERVAL_MINUTES`**：缓存重推 HA 间隔可配置（默认 10 分钟，`0` 禁用）；重推时 INFO 只报「缓存重推成功」，传感器数值明细需 `LOG_LEVEL=DEBUG`
+- **抓取健康检测**：每日成败写入 `fetch_health.json`；连续失败达到 `FETCH_FAIL_ALERT_DAYS`（默认 2）时推送企微告警（含近期失败原因）；`FETCH_HEALTH_CHECK_TIME` 日终巡检兜底
 
 ### 修复
 - **扫码兜底未推送二维码**：验证码失败切扫码时，残留弹层/隐式等待导致取不到二维码图，webhook 从未触发。现先推文字提醒，刷新登录页并多选择器取图，失败时整页截图兜底并再告警
-
-### 新增
-- **抓取健康检测**：每日成败写入 `fetch_health.json`；连续失败达到 `FETCH_FAIL_ALERT_DAYS`（默认 2）时推送企微告警（含近期失败原因）；`FETCH_HEALTH_CHECK_TIME` 日终巡检兜底
 
 ## 2026-06-06
 
