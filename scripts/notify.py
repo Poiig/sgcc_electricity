@@ -308,18 +308,34 @@ def _ensure_env_loaded() -> None:
         load_project_env()
 
 
-def _push_wework_login_text(webhook: str, reason: str) -> bool:
+def _push_wework_login_text(webhook: str, reason: str, tip: str = "") -> bool:
+    """企微 markdown 登录提醒；tip 可补充「正在获取二维码 / 取图失败」等说明。"""
     scene = reason.strip() or "扫码登录"
+    extra = f"\n> {tip}" if tip else ""
     content = (
         "**国家电网登录提醒**\n"
         f"> 场景：<font color=\"comment\">{scene}</font>\n"
-        "> 请使用 **国网 App** 扫描下方二维码完成登录"
+        "> 请使用 **国网 App** 扫描二维码完成登录"
+        f"{extra}"
     )
     return _post_wework(webhook, {"msgtype": "markdown", "markdown": {"content": content}})
 
 
-def push_login_qrcode(qrcode: bytes, reason: str = "") -> bool:
-    """按 PUSH_TYPE 选择单一二维码推送渠道。"""
+def push_login_need_scan(reason: str = "", tip: str = "正在获取登录二维码，稍后将推送图片") -> bool:
+    """在拿到二维码图片之前先发文字提醒，避免取图失败时完全无通知。"""
+    _ensure_env_loaded()
+    wework = os.getenv("WEWORK_WEBHOOK_URL", "").strip()
+    if not wework:
+        logging.info("未配置 WEWORK_WEBHOOK_URL，跳过扫码文字提醒")
+        return False
+    ok = _push_wework_login_text(wework, reason, tip=tip)
+    if ok:
+        logging.info("已推送扫码登录文字提醒到企业微信")
+    return ok
+
+
+def push_login_qrcode(qrcode: bytes, reason: str = "", with_text: bool = True) -> bool:
+    """按 PUSH_TYPE / 环境变量推送登录二维码图片；with_text=False 时不再重复发 markdown（前面已发过）。"""
     _ensure_env_loaded()
     if isinstance(qrcode, str):
         qrcode = qrcode.encode("utf-8")
@@ -329,14 +345,18 @@ def push_login_qrcode(qrcode: bytes, reason: str = "") -> bool:
     qrcode_url = os.getenv("PUSH_QRCODE_URL", "").strip()
 
     if push_type == "wework" and wework:
-        ok = _push_wework_login_text(wework, reason)
+        ok = False
+        if with_text:
+            ok = _push_wework_login_text(wework, reason) or ok
         if WeworkQrCodeNotify()(qrcode):
             ok = True
         return ok
     if qrcode_url:
         return UrlLoginQrCodeNotify()(qrcode)
     if wework:
-        ok = _push_wework_login_text(wework, reason)
+        ok = False
+        if with_text:
+            ok = _push_wework_login_text(wework, reason) or ok
         if WeworkQrCodeNotify()(qrcode):
             ok = True
         return ok
