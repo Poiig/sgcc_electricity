@@ -1,4 +1,4 @@
-"""点击验证码 LLM 解算器（火山引擎豆包，OpenAI 兼容接口）。"""
+"""点击验证码 LLM 解算器（默认火山引擎豆包，支持任意 OpenAI 兼容接口）。"""
 
 import base64
 import io
@@ -13,7 +13,7 @@ from urllib.parse import unquote
 
 import requests
 from PIL import Image
-from openai import OpenAI
+from openai import BadRequestError, OpenAI
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,60 @@ def llm_model() -> str:
 
 def llm_base_url() -> str:
     return os.getenv("LLM_BASE_URL", DEFAULT_LLM_BASE_URL).strip() or DEFAULT_LLM_BASE_URL
+
+
+def _env_number(name: str, cast):
+    """读取可选的数字配置；未配置或格式错误时返回 None（沿用默认行为）。"""
+    raw = os.getenv(name, "").strip().strip('"').strip("'")
+    if not raw:
+        return None
+    try:
+        value = cast(raw)
+    except ValueError:
+        logger.warning("%s=%r 不是有效数字，已忽略", name, raw)
+        return None
+    return value if value >= 0 else None
+
+
+def llm_timeout() -> Optional[float]:
+    """LLM_TIMEOUT：单次请求超时秒数，未配置时沿用 openai 库默认值（600 秒）。"""
+    value = _env_number("LLM_TIMEOUT", float)
+    return value if value else None
+
+
+def llm_max_retries() -> Optional[int]:
+    """LLM_MAX_RETRIES：失败自动重试次数，未配置时沿用 openai 库默认值（2 次）。"""
+    return _env_number("LLM_MAX_RETRIES", int)
+
+
+def llm_max_tokens(default: int) -> int:
+    """LLM_MAX_TOKENS：最大输出 token 数，未配置时使用调用处的默认值。"""
+    value = _env_number("LLM_MAX_TOKENS", int)
+    return value if value else default
+
+
+def create_llm_client(api_key: str, base_url: Optional[str] = None) -> OpenAI:
+    """按 LLM_* 配置创建 OpenAI 兼容客户端。"""
+    kwargs = {"base_url": base_url or llm_base_url(), "api_key": api_key}
+    timeout = llm_timeout()
+    if timeout is not None:
+        kwargs["timeout"] = timeout
+    max_retries = llm_max_retries()
+    if max_retries is not None:
+        kwargs["max_retries"] = max_retries
+    return OpenAI(**kwargs)
+
+
+def create_chat_completion(client: OpenAI, **kwargs):
+    """调用 chat.completions；部分模型不接受 max_tokens 时，自动改用 max_completion_tokens 重试。"""
+    try:
+        return client.chat.completions.create(**kwargs)
+    except BadRequestError as exc:
+        if "max_tokens" not in kwargs or "max_completion_tokens" not in str(exc):
+            raise
+        logger.info("模型不支持 max_tokens 参数，改用 max_completion_tokens 重试")
+        kwargs["max_completion_tokens"] = kwargs.pop("max_tokens")
+        return client.chat.completions.create(**kwargs)
 
 
 def _mask_api_key(key: str) -> str:
@@ -65,7 +119,7 @@ class ClickCaptchaSolver:
         if self._client is None:
             if not self.api_key:
                 raise RuntimeError("LLM_API_KEY 未设置，无法使用 LLM 验证码识别")
-            self._client = OpenAI(base_url=self.base_url, api_key=self.api_key)
+            self._client = create_llm_client(self.api_key, self.base_url)
         return self._client
 
     def solve(
@@ -161,7 +215,7 @@ class ClickCaptchaSolver:
 
     def _call_chat(self, content: list, *, json_mode: bool, label: str) -> str:
         messages = [{"role": "user", "content": content}]
-        kwargs = {"model": self.model, "messages": messages, "max_tokens": 4096}
+        kwargs = {"model": self.model, "messages": messages, "max_tokens": llm_max_tokens(4096)}
         if json_mode:
             kwargs["messages"] = [
                 {"role": "system", "content": "Output valid JSON only. No markdown, no explanation."},
@@ -184,9 +238,15 @@ class ClickCaptchaSolver:
         heartbeat.start()
         t0 = time.monotonic()
         try:
-            response = self.client.chat.completions.create(**kwargs)
+            response = create_chat_completion(self.client, **kwargs)
             output = response.choices[0].message.content or ""
-            logger.info("大模型 API 响应完成 (%.1fs)", time.monotonic() - t0)
+            # 打印 Request ID，便于向大模型服务商排查慢响应问题
+            request_id = getattr(response, "id", None) or \
+                         getattr(response, "_request_id", None) or "unknown"
+            elapsed = time.monotonic() - t0
+            logger.info("大模型 API 响应完成 (%.1fs) | Request-ID: %s", elapsed, request_id)
+            if elapsed > 30:
+                logger.warning("大模型响应过慢 (%.1fs)，Request-ID: %s，可凭此向服务商排查", elapsed, request_id)
             return output
         finally:
             stop.set()
