@@ -2354,22 +2354,24 @@ class DataFetcher:
             self.db.close_connect()
 
 
+
 def describe_fetch_result(result) -> tuple:
     """
-    把 DataFetcher.fetch() 的返回值转换为 (是否成功, 说明)，供定时同步和手动同步记录状态。
-    登录失败、取不到户号、所有户号都失败时视为失败；部分户号失败时视为成功，但在说明中列出失败的户号。
-    result 不是 dict（如旧版本返回 None）时按成功处理，与原来的行为一致。
+    把 DataFetcher.fetch() 的返回值转换为 (状态, 说明)，供定时同步和手动同步记录结果。
+    状态为 success / partial / failed：
+      - 登录失败、取不到户号、所有户号都失败、没有可同步的户号 → failed
+      - 部分户号失败（其余成功）→ partial，说明中列出失败的户号
+      - 全部成功 → success
     """
-    if not isinstance(result, dict):
-        return True, ""
-    ok = result.get("ok") or []
-    failed = result.get("failed") or []
+    if not result:
+        return "failed", "同步异常结束"
     if not result.get("login"):
-        return False, result.get("error") or "登录失败"
+        return "failed", result.get("error") or "登录失败"
+    ok, failed = result.get("ok") or [], result.get("failed") or []
     if result.get("error") and not ok:
-        return False, result["error"]
-    if failed and not ok:
-        return False, f"所有户号获取失败: {', '.join(failed)}"
-    if failed:
-        return True, f"成功 {len(ok)} 户，失败 {len(failed)} 户: {', '.join(failed)}"
-    return True, ""
+        return "failed", result["error"]
+    if ok and not failed:
+        return "success", f"同步完成：{len(ok)} 户"
+    if ok:
+        return "partial", f"部分完成：成功 {len(ok)} 户，失败 {len(failed)} 户（{', '.join(failed)}）"
+    return "failed", f"所有户号都获取失败（{', '.join(failed)}）" if failed else "没有可同步的户号"

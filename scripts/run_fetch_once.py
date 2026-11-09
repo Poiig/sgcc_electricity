@@ -48,9 +48,9 @@ with fetch_lock(source="manual", block=False) as acquired:
         logging.error("已有同步任务正在运行，请稍后再试")
         sys.exit(2)
     try:
-        success, detail = describe_fetch_result(fetcher.fetch())
-        if success:
-            mark_fetch_finished(True, f"手动同步完成（{detail}）" if detail else "手动同步完成")
+        status, detail = describe_fetch_result(fetcher.fetch())
+        if status != "failed":
+            mark_fetch_finished(True, f"手动{detail}" if status == "success" else f"手动同步{detail}")
         else:
             mark_fetch_finished(False, f"手动同步失败: {detail}")
             logging.error("手动同步失败: %s", detail)
