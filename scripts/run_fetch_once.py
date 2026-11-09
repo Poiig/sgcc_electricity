@@ -32,7 +32,7 @@ try:
 except Exception:
     pass
 
-from data_fetcher import DataFetcher
+from data_fetcher import DataFetcher, describe_fetch_result
 from fetch_lock import fetch_lock, mark_fetch_finished
 
 phone = os.getenv("PHONE_NUMBER")
@@ -48,8 +48,13 @@ with fetch_lock(source="manual", block=False) as acquired:
         logging.error("已有同步任务正在运行，请稍后再试")
         sys.exit(2)
     try:
-        fetcher.fetch()
-        mark_fetch_finished(True, "手动同步完成")
+        success, detail = describe_fetch_result(fetcher.fetch())
+        if success:
+            mark_fetch_finished(True, f"手动同步完成（{detail}）" if detail else "手动同步完成")
+        else:
+            mark_fetch_finished(False, f"手动同步失败: {detail}")
+            logging.error("手动同步失败: %s", detail)
+            sys.exit(1)
     except Exception as exc:
         mark_fetch_finished(False, str(exc))
         raise
