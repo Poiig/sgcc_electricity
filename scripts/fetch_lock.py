@@ -2,6 +2,7 @@
 
 import json
 import os
+import threading
 import time
 from contextlib import contextmanager
 from typing import Iterator
@@ -10,7 +11,10 @@ from const import get_data_dir
 
 _LOCK_FILE = "fetch.lock"
 _STATE_FILE = "fetch_state.json"
-_STALE_SECONDS = 3600
+# 持有锁的进程每分钟刷新一次锁文件时间（心跳）；超过这个时间没有刷新，说明进程已退出，锁视为失效。
+# 多户、多次重试时一次同步可能超过 1 小时，所以按心跳判断，而不是按开始时间
+_STALE_SECONDS = 600
+_HEARTBEAT_SECONDS = 60
 
 
 def _lock_path() -> str:
@@ -30,16 +34,15 @@ def read_fetch_state() -> dict:
             data = json.load(f)
         # 如果状态是 running，检查是否应该自动重置
         if data.get("status") == "running" and data.get("started_at"):
-            started = float(data["started_at"])
             # lock 文件不存在说明进程已重启，立即重置
             lock_path = _lock_path()
             if not os.path.isfile(lock_path):
                 data["status"] = "idle"
                 data["message"] = "上次任务因容器重启已自动重置"
                 write_fetch_state(data)
-            elif time.time() - started > _STALE_SECONDS:
+            elif time.time() - os.path.getmtime(lock_path) > _STALE_SECONDS:
                 data["status"] = "idle"
-                data["message"] = "上次任务超时，已自动重置"
+                data["message"] = "上次任务已无响应（锁文件超过 10 分钟没有心跳），已自动重置"
                 write_fetch_state(data)
                 _release_lock_file()
         return data
@@ -141,14 +144,25 @@ def _try_acquire_lock() -> bool:
         return False
 
 
+def _heartbeat(stop: threading.Event) -> None:
+    """持有锁期间每分钟刷新锁文件时间，表明进程还活着"""
+    while not stop.wait(_HEARTBEAT_SECONDS):
+        try:
+            os.utime(_lock_path(), None)
+        except Exception:
+            pass
+
+
 @contextmanager
 def fetch_lock(source: str = "manual", block: bool = False) -> Iterator[bool]:
     acquired = False
+    stop = threading.Event()
     try:
         while True:
             if _try_acquire_lock():
                 acquired = True
                 mark_fetch_running(source)
+                threading.Thread(target=_heartbeat, args=(stop,), daemon=True).start()
                 break
             if not block:
                 yield False
@@ -156,6 +170,7 @@ def fetch_lock(source: str = "manual", block: bool = False) -> Iterator[bool]:
             time.sleep(1)
         yield True
     finally:
+        stop.set()
         if acquired:
             _release_lock_file()
 
