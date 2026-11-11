@@ -20,7 +20,15 @@ from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.support.ui import WebDriverWait
 
-from captcha_solver.llm_solver import ClickCaptchaSolver, llm_api_key, llm_base_url, llm_model
+from captcha_solver.llm_solver import (
+    ClickCaptchaSolver,
+    create_chat_completion,
+    create_llm_client,
+    llm_api_key,
+    llm_base_url,
+    llm_max_tokens,
+    llm_model,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -265,17 +273,12 @@ def _solve_slider(driver: WebDriver, selectors: dict) -> bool:
         return False
 
     try:
-        from openai import OpenAI
-
         logger.info(
             "调用大模型解算滑块验证码 (model=%s, endpoint=%s)...",
             llm_model(),
             llm_base_url(),
         )
-        client = OpenAI(
-            base_url=llm_base_url(),
-            api_key=api_key,
-        )
+        client = create_llm_client(api_key)
 
         if bg_url.startswith("http"):
             resp = requests.get(bg_url, timeout=15)
@@ -292,7 +295,8 @@ def _solve_slider(driver: WebDriver, selectors: dict) -> bool:
         model = llm_model()
         logger.info("正在请求大模型 API 识别滑块缺口 (model=%s)...", model)
 
-        response = client.chat.completions.create(
+        response = create_chat_completion(
+            client,
             model=model,
             messages=[
                 {
@@ -311,7 +315,7 @@ def _solve_slider(driver: WebDriver, selectors: dict) -> bool:
                     ],
                 }
             ],
-            max_tokens=50,
+            max_tokens=llm_max_tokens(50),
         )
 
         output = response.choices[0].message.content or ""

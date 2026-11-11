@@ -24,6 +24,34 @@ LLM_MODEL=doubao-seed-2-0-pro-260215
 | `LLM_API_KEY` | — | **必填**。火山方舟 API Key |
 | `LLM_BASE_URL` | `https://ark.cn-beijing.volces.com/api/v3` | OpenAI 兼容 API 地址 |
 | `LLM_MODEL` | `doubao-seed-2-0-pro-260215` | 多模态视觉模型 |
+| `LLM_TIMEOUT` | 600 | 可选。单次请求超时秒数 |
+| `LLM_MAX_RETRIES` | 2 | 可选。请求失败自动重试次数 |
+| `LLM_MAX_TOKENS` | 点选 4096 / 滑块 50 | 可选。最大输出 token 数，推理模型建议调大 |
+
+HA Add-on 用户在配置页填写 `llm_api_key`、`llm_base_url`、`llm_model`。
+
+---
+
+## 更换其他厂商或模型
+
+程序通过 OpenAI 兼容接口调用大模型，不限于豆包。满足以下两个条件即可更换：
+
+1. **模型支持图片输入**（视觉 / 多模态模型）。纯文本模型无法识别验证码。
+2. **厂商提供 OpenAI 兼容接口**。在厂商文档中查找 OpenAI 兼容的 `base_url` 和模型名。
+
+```env
+CAPTCHA_SOLVER=llm
+LLM_API_KEY=对应厂商的 API Key
+LLM_BASE_URL=对应厂商的 OpenAI 兼容地址（通常以 /v1 结尾）
+LLM_MODEL=对应厂商的视觉模型名
+```
+
+兼容性说明：
+
+- 不支持 JSON 模式（`response_format`）的厂商，程序会自动退回普通模式重试。
+- 不接受 `max_tokens` 参数、要求使用 `max_completion_tokens` 的模型，程序会自动改用后者重试。
+- 会先“思考”再回答的推理模型，滑块识别默认只给 50 个 token，可能来不及输出答案，请设置 `LLM_MAX_TOKENS=4096`。
+- 提示词按豆包调试，换模型后识别率可能不同。可在日志中查看 `大模型响应:` 一行，确认返回了坐标。
 
 ---
 
