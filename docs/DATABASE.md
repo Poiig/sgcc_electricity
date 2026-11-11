@@ -1,6 +1,6 @@
 # 数据库表结构
 
-启用数据库（`DB_TYPE=sqlite` 或 `mysql`）后，程序自动创建以下 5 张表。
+启用数据库（`DB_TYPE=sqlite` / `mysql` / `postgresql`）后，程序自动创建以下表。
 
 > 所有表均包含 `user_id` 和 `user_name` 字段。`user_name` 优先取自 `USER_NAMES` 自定义配置，未配置时从国网网站获取，并在每次更新时自动补充。
 
@@ -119,5 +119,35 @@
 
 ---
 
-通过 `DATA_RETENTION_DAYS` 环境变量控制数据保留天数（默认 365 天），自动清理过期的日用电和余额记录。
+## `payment_records` — 交费记录
+
+主键：`(user_id, pay_date, rcv_amt, type_code, pay_mode)` — **同一缴费事件去重**；重复同步 `INSERT OR IGNORE` / `ON CONFLICT DO NOTHING`，不覆盖已有行。
+
+抓取页：`https://95598.cn/osgweb/paymentRecord`（与登录同域，勿用 www）。进页后点「最近1年」，再按分页依次拉取；若库中已有该户最新 `pay_date`，列表倒序翻到不新于该时间的页即停止（增量）。
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| user_id | TEXT | 用户户号 |
+| user_name | TEXT | 用户名 |
+| pay_date | TEXT | 缴费时间（如 `2026-11-02 14:19:01`） |
+| ymd | TEXT | 缴费日（YYYY-MM-DD） |
+| ym | TEXT | 缴费月（YYYY-MM） |
+| rcv_amt | REAL | 缴费金额（元） |
+| pay_mode | TEXT | 缴费方式码 |
+| pay_mode_name | TEXT | 缴费类型文案（如「社会网点交费」） |
+| type_code | TEXT | 业务类型码（如 `0101` 收电费 / `0103` 收预收费） |
+| type_name | TEXT | 业务类型名 |
+| chan_cls | TEXT | 渠道分类（支付宝 / 网上国网） |
+| chan_name | TEXT | 渠道明细 |
+| remark | TEXT | 备注 |
+| cons_no | TEXT | 户号 |
+| cons_name | TEXT | 户名 |
+| penalty | TEXT | 违约金（原文） |
+| created_at | DATETIME | 入库时间 |
+
+Web 控制台「交费记录」Tab：全户合计、分户卡片、月度堆叠柱图、渠道占比与明细表（`GET /api/payments/report`）。
+
+---
+
+通过 `DATA_RETENTION_DAYS` 环境变量控制数据保留天数（默认 365 天），自动清理过期的日用电、余额和交费记录。
 `IGNORE_USER_ID` 中配置的户号仅跳过本次抓取，不会删除数据库中的历史数据。

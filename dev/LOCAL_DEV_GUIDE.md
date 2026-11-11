@@ -262,3 +262,39 @@ bg = Image.open("pages/captcha_bg_xxx.png")
 points = solver.solve_from_images(answer, bg)
 print(points)
 ```
+
+## 9. 仅测试交费记录（扫码登录）
+
+用于验证 `paymentRecord` 拉取与入库，不抓余额/用电。
+
+### `.env` 最少配置
+
+```ini
+PHONE_NUMBER=你的手机号
+PASSWORD=你的密码
+LOGIN_FALLBACK=qrcode
+DB_TYPE=sqlite
+FETCH_PAYMENT_RECORDS=true
+```
+
+### 运行
+
+```powershell
+.\.venv\Scripts\Activate.ps1
+cd scripts
+python run_fetch_payment.py
+```
+
+流程：登录（失败会走扫码）→ 各户号进交费页 → 点「最近1年」→ 分页拉取 → 写入 `payment_records`（重复跳过；库内已有最新缴费时间则增量截止）。
+
+### 查看结果
+
+```powershell
+# 另开终端启动 Web 控制台
+cd ..
+.\dev\run_dashboard.ps1
+```
+
+浏览器打开 http://127.0.0.1:8080/ ，点「交费记录」Tab 看全户报表。或查库表 `payment_records`。
+
+调试页字段可参考 `dev/dump_payment_list.js`（Console 提取 `payLists`）。

@@ -50,6 +50,15 @@ chmod +x dev/run_dashboard.sh
 
 见 [LOCAL_DEV_GUIDE.md](./LOCAL_DEV_GUIDE.md)。
 
+## 仅测交费记录
+
+```powershell
+cd scripts
+python run_fetch_payment.py
+```
+
+详见 [LOCAL_DEV_GUIDE.md §9](./LOCAL_DEV_GUIDE.md)。浏览器 Console 调试脚本：`dump_payment_list.js` / `dump_vue_state.js`。
+
 ## 生产环境 Web 控制台
 
 见 [docs/WEB_DASHBOARD.md](../docs/WEB_DASHBOARD.md)。

@@ -1,11 +1,12 @@
-"""Unified database module with 5 tables for SGCC electricity data.
+"""Unified database module for SGCC electricity data.
 
 Tables:
-    users         - user account info (user_id, phone_number, user_name, timestamps)
-    daily_usage   - daily electricity usage with TOU breakdown (valley/flat/peak/tip)
-    monthly_usage - monthly electricity usage with TOU breakdown
-    yearly_usage  - yearly electricity usage with TOU breakdown
-    balance_log   - balance history with enhanced info (prepay, estimated, owe, penalty)
+    users            - user account info (user_id, phone_number, user_name, timestamps)
+    daily_usage      - daily electricity usage with TOU breakdown (valley/flat/peak/tip)
+    monthly_usage    - monthly electricity usage with TOU breakdown
+    yearly_usage     - yearly electricity usage with TOU breakdown
+    balance_log      - balance history with enhanced info (prepay, estimated, owe, penalty)
+    payment_records  - 交费记录（按 pay_date+金额+类型去重）
 
 Field naming conventions:
     user_name     - user/consumer name from State Grid
@@ -82,12 +83,43 @@ class DB:
     def insert_step_data(self, data: dict) -> bool:
         raise NotImplementedError
 
+    def insert_payment_records(self, records: list, user_name: str = "") -> int:
+        """写入交费记录；主键冲突则跳过。返回新写入条数。"""
+        raise NotImplementedError
+
+    def get_latest_payment_date(self, user_id: str) -> Optional[str]:
+        """该户号库中最新一条缴费时间（pay_date），用于增量拉取。"""
+        raise NotImplementedError
+
     def query_month_tou_from_daily(self, user_id: str, month: str) -> Optional[dict]:
         """按自然月汇总 daily_usage 表中的谷/平/峰/尖电量。"""
         raise NotImplementedError
 
     def close_connect(self) -> None:
         raise NotImplementedError
+
+
+def _payment_row_params(user_id: str, user_name: str, row: dict) -> tuple:
+    """拼装 payment_records 插入参数，保证主键字段齐全。"""
+    pay_date = str(row.get("pay_date") or "").strip()
+    return (
+        str(user_id).strip(),
+        str(user_name or row.get("cons_name") or ""),
+        pay_date,
+        str(row.get("ymd") or (pay_date[:10] if pay_date else "")).strip(),
+        str(row.get("ym") or (pay_date[:7] if pay_date else "")).strip(),
+        float(row.get("rcv_amt") or 0),
+        str(row.get("pay_mode") or ""),
+        str(row.get("pay_mode_name") or ""),
+        str(row.get("type_code") or ""),
+        str(row.get("type_name") or ""),
+        str(row.get("chan_cls") or ""),
+        str(row.get("chan_name") or ""),
+        str(row.get("remark") or ""),
+        str(row.get("cons_no") or user_id),
+        str(row.get("cons_name") or ""),
+        str(row.get("penalty") or ""),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -101,6 +133,7 @@ class SqliteDB(DB):
     YEARLY_TABLE = "yearly_usage"
     BALANCE_TABLE = "balance_log"
     STEP_TABLE = "step_usage"
+    PAYMENT_TABLE = "payment_records"
 
     def __init__(self) -> None:
         self.connect: Optional[sqlite3.Connection] = None
@@ -212,10 +245,32 @@ class SqliteDB(DB):
                 PRIMARY KEY (user_id, year_month)
             );
 
+            CREATE TABLE IF NOT EXISTS {self.PAYMENT_TABLE} (
+                user_id TEXT NOT NULL,
+                user_name TEXT NOT NULL DEFAULT '',
+                pay_date TEXT NOT NULL,
+                ymd TEXT NOT NULL DEFAULT '',
+                ym TEXT NOT NULL DEFAULT '',
+                rcv_amt REAL NOT NULL DEFAULT 0,
+                pay_mode TEXT NOT NULL DEFAULT '',
+                pay_mode_name TEXT NOT NULL DEFAULT '',
+                type_code TEXT NOT NULL DEFAULT '',
+                type_name TEXT NOT NULL DEFAULT '',
+                chan_cls TEXT NOT NULL DEFAULT '',
+                chan_name TEXT NOT NULL DEFAULT '',
+                remark TEXT NOT NULL DEFAULT '',
+                cons_no TEXT NOT NULL DEFAULT '',
+                cons_name TEXT NOT NULL DEFAULT '',
+                penalty TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, pay_date, rcv_amt, type_code, pay_mode)
+            );
+
             CREATE INDEX IF NOT EXISTS idx_daily_user_date ON {self.DAILY_TABLE}(user_id, date);
             CREATE INDEX IF NOT EXISTS idx_monthly_user_month ON {self.MONTHLY_TABLE}(user_id, month);
             CREATE INDEX IF NOT EXISTS idx_yearly_user_year ON {self.YEARLY_TABLE}(user_id, year);
             CREATE INDEX IF NOT EXISTS idx_balance_user_asof ON {self.BALANCE_TABLE}(user_id, as_of);
+            CREATE INDEX IF NOT EXISTS idx_payment_user_date ON {self.PAYMENT_TABLE}(user_id, pay_date);
         """)
         self.connect.commit()
 
@@ -360,6 +415,10 @@ class SqliteDB(DB):
         cutoff = (datetime.now() - timedelta(days=retention_days)).strftime("%Y-%m-%d")
         self._execute(f"DELETE FROM {self.DAILY_TABLE} WHERE user_id=? AND date<?", (self.user_id, cutoff))
         self._execute(f"DELETE FROM {self.BALANCE_TABLE} WHERE user_id=? AND as_of<?", (self.user_id, cutoff))
+        self._execute(
+            f"DELETE FROM {self.PAYMENT_TABLE} WHERE user_id=? AND substr(pay_date,1,10)<?",
+            (self.user_id, cutoff),
+        )
         logging.info("已清理户号 %s 早于 %s 的历史数据", self.user_id, cutoff)
 
     def insert_step_data(self, data: dict) -> bool:
@@ -385,10 +444,46 @@ class SqliteDB(DB):
              int(data.get("step_stage", 1))),
         )
 
+    def insert_payment_records(self, records: list, user_name: str = "") -> int:
+        """SQLite：INSERT OR IGNORE 跳过重复缴费。"""
+        if not records or self.connect is None:
+            return 0
+        sql = f"""INSERT OR IGNORE INTO {self.PAYMENT_TABLE}
+            (user_id, user_name, pay_date, ymd, ym, rcv_amt, pay_mode, pay_mode_name,
+             type_code, type_name, chan_cls, chan_name, remark, cons_no, cons_name, penalty)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
+        inserted = 0
+        try:
+            for row in records:
+                if not isinstance(row, dict) or not row.get("pay_date"):
+                    continue
+                cur = self.connect.execute(sql, _payment_row_params(self.user_id, user_name, row))
+                inserted += cur.rowcount if cur.rowcount and cur.rowcount > 0 else 0
+            self.connect.commit()
+        except (sqlite3.Error, TypeError, ValueError) as exc:
+            logging.error("缴费记录写入失败: %s", exc)
+            return 0
+        return inserted
+
+    def get_latest_payment_date(self, user_id: str) -> Optional[str]:
+        if self.connect is None:
+            return None
+        try:
+            cur = self.connect.execute(
+                f"SELECT pay_date FROM {self.PAYMENT_TABLE} WHERE user_id=? "
+                "ORDER BY pay_date DESC LIMIT 1",
+                (str(user_id).strip(),),
+            )
+            row = cur.fetchone()
+            return str(row[0]).strip() if row and row[0] else None
+        except sqlite3.Error as exc:
+            logging.error("查询最新缴费时间失败: %s", exc)
+            return None
+
     def delete_user_data(self, user_id: str) -> None:
         """手动清理指定户号数据（正常运行时不自动调用）"""
         for tbl in [self.DAILY_TABLE, self.MONTHLY_TABLE, self.YEARLY_TABLE,
-                     self.BALANCE_TABLE, self.STEP_TABLE, self.USERS_TABLE]:
+                     self.BALANCE_TABLE, self.STEP_TABLE, self.PAYMENT_TABLE, self.USERS_TABLE]:
             self._execute(f"DELETE FROM {tbl} WHERE user_id=?", (str(user_id).strip(),))
         logging.info("已删除户号 %s 的全部数据", user_id)
 
@@ -422,6 +517,7 @@ class MysqlDB(DB):
     YEARLY_TABLE = "yearly_usage"
     BALANCE_TABLE = "balance_log"
     STEP_TABLE = "step_usage"
+    PAYMENT_TABLE = "payment_records"
 
     def __init__(self) -> None:
         self.connect = None
@@ -528,6 +624,28 @@ class MysqlDB(DB):
                 `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 PRIMARY KEY (`user_id`, `year_month`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""")
+
+            cursor.execute(f"""CREATE TABLE IF NOT EXISTS `{self.PAYMENT_TABLE}` (
+                `user_id` VARCHAR(50) NOT NULL,
+                `user_name` VARCHAR(100) NOT NULL DEFAULT '',
+                `pay_date` VARCHAR(32) NOT NULL,
+                `ymd` VARCHAR(10) NOT NULL DEFAULT '',
+                `ym` VARCHAR(7) NOT NULL DEFAULT '',
+                `rcv_amt` DOUBLE NOT NULL DEFAULT 0,
+                `pay_mode` VARCHAR(20) NOT NULL DEFAULT '',
+                `pay_mode_name` VARCHAR(50) NOT NULL DEFAULT '',
+                `type_code` VARCHAR(20) NOT NULL DEFAULT '',
+                `type_name` VARCHAR(50) NOT NULL DEFAULT '',
+                `chan_cls` VARCHAR(50) NOT NULL DEFAULT '',
+                `chan_name` VARCHAR(100) NOT NULL DEFAULT '',
+                `remark` VARCHAR(100) NOT NULL DEFAULT '',
+                `cons_no` VARCHAR(50) NOT NULL DEFAULT '',
+                `cons_name` VARCHAR(100) NOT NULL DEFAULT '',
+                `penalty` VARCHAR(50) NOT NULL DEFAULT '',
+                `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (`user_id`, `pay_date`, `rcv_amt`, `type_code`, `pay_mode`),
+                KEY `idx_payment_user_date` (`user_id`, `pay_date`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4""")
 
             self.connect.commit()
@@ -674,6 +792,10 @@ class MysqlDB(DB):
         cutoff = (datetime.now() - timedelta(days=retention_days)).strftime("%Y-%m-%d")
         self._execute(f"DELETE FROM `{self.DAILY_TABLE}` WHERE user_id=%s AND date<%s", (self.user_id, cutoff))
         self._execute(f"DELETE FROM `{self.BALANCE_TABLE}` WHERE user_id=%s AND as_of<%s", (self.user_id, cutoff))
+        self._execute(
+            f"DELETE FROM `{self.PAYMENT_TABLE}` WHERE user_id=%s AND LEFT(pay_date,10)<%s",
+            (self.user_id, cutoff),
+        )
         logging.info("已清理户号 %s 早于 %s 的历史数据", self.user_id, cutoff)
 
     def insert_step_data(self, data: dict) -> bool:
@@ -699,10 +821,56 @@ class MysqlDB(DB):
              int(data.get("step_stage", 1))),
         )
 
+    def insert_payment_records(self, records: list, user_name: str = "") -> int:
+        """MySQL：INSERT IGNORE 跳过重复缴费。"""
+        if not records or self.connect is None or not self.connect.is_connected():
+            return 0
+        sql = f"""INSERT IGNORE INTO `{self.PAYMENT_TABLE}`
+            (`user_id`, `user_name`, `pay_date`, `ymd`, `ym`, `rcv_amt`, `pay_mode`, `pay_mode_name`,
+             `type_code`, `type_name`, `chan_cls`, `chan_name`, `remark`, `cons_no`, `cons_name`, `penalty`)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)"""
+        inserted = 0
+        cursor = None
+        try:
+            cursor = self.connect.cursor()
+            for row in records:
+                if not isinstance(row, dict) or not row.get("pay_date"):
+                    continue
+                cursor.execute(sql, _payment_row_params(self.user_id, user_name, row))
+                inserted += cursor.rowcount if cursor.rowcount and cursor.rowcount > 0 else 0
+            self.connect.commit()
+        except Exception as exc:
+            logging.error("缴费记录写入失败: %s", exc)
+            return 0
+        finally:
+            if cursor:
+                cursor.close()
+        return inserted
+
+    def get_latest_payment_date(self, user_id: str) -> Optional[str]:
+        if self.connect is None or not self.connect.is_connected():
+            return None
+        cursor = None
+        try:
+            cursor = self.connect.cursor()
+            cursor.execute(
+                f"SELECT pay_date FROM `{self.PAYMENT_TABLE}` WHERE user_id=%s "
+                "ORDER BY pay_date DESC LIMIT 1",
+                (str(user_id).strip(),),
+            )
+            row = cursor.fetchone()
+            return str(row[0]).strip() if row and row[0] else None
+        except Exception as exc:
+            logging.error("查询最新缴费时间失败: %s", exc)
+            return None
+        finally:
+            if cursor:
+                cursor.close()
+
     def delete_user_data(self, user_id: str) -> None:
         """手动清理指定户号数据（正常运行时不自动调用）"""
         for tbl in [self.DAILY_TABLE, self.MONTHLY_TABLE, self.YEARLY_TABLE,
-                     self.BALANCE_TABLE, self.STEP_TABLE, self.USERS_TABLE]:
+                     self.BALANCE_TABLE, self.STEP_TABLE, self.PAYMENT_TABLE, self.USERS_TABLE]:
             self._execute(f"DELETE FROM `{tbl}` WHERE user_id=%s", (str(user_id).strip(),))
         logging.info("已删除户号 %s 的全部数据", user_id)
 
@@ -751,6 +919,7 @@ class PostgresqlDB(DB):
     YEARLY_TABLE = "yearly_usage"
     BALANCE_TABLE = "balance_log"
     STEP_TABLE = "step_usage"
+    PAYMENT_TABLE = "payment_records"
 
     def __init__(self) -> None:
         self.connect = None
@@ -871,12 +1040,37 @@ class PostgresqlDB(DB):
                 PRIMARY KEY (user_id, year_month)
             )""")
 
+            cursor.execute(f"""CREATE TABLE IF NOT EXISTS {self.PAYMENT_TABLE} (
+                user_id VARCHAR(50) NOT NULL,
+                user_name VARCHAR(100) NOT NULL DEFAULT '',
+                pay_date VARCHAR(32) NOT NULL,
+                ymd VARCHAR(10) NOT NULL DEFAULT '',
+                ym VARCHAR(7) NOT NULL DEFAULT '',
+                rcv_amt DOUBLE PRECISION NOT NULL DEFAULT 0,
+                pay_mode VARCHAR(20) NOT NULL DEFAULT '',
+                pay_mode_name VARCHAR(50) NOT NULL DEFAULT '',
+                type_code VARCHAR(20) NOT NULL DEFAULT '',
+                type_name VARCHAR(50) NOT NULL DEFAULT '',
+                chan_cls VARCHAR(50) NOT NULL DEFAULT '',
+                chan_name VARCHAR(100) NOT NULL DEFAULT '',
+                remark VARCHAR(100) NOT NULL DEFAULT '',
+                cons_no VARCHAR(50) NOT NULL DEFAULT '',
+                cons_name VARCHAR(100) NOT NULL DEFAULT '',
+                penalty VARCHAR(50) NOT NULL DEFAULT '',
+                created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, pay_date, rcv_amt, type_code, pay_mode)
+            )""")
+
             # balance_log 有两条不带 user_id、纯按 created_at DESC 取 Top-N 的报表查询
             # (list_balance_logs / latest_balance_log_timestamp)，主键 (user_id, as_of) 覆盖不到，
             # 补单列索引避免 seq scan + sort。PG btree 天然双向，DESC 走 backward scan。
             cursor.execute(
                 "CREATE INDEX IF NOT EXISTS idx_balance_log_created_at "
                 f"ON {self.BALANCE_TABLE} (created_at)"
+            )
+            cursor.execute(
+                "CREATE INDEX IF NOT EXISTS idx_payment_user_date "
+                f"ON {self.PAYMENT_TABLE} (user_id, pay_date)"
             )
 
             self.connect.commit()
@@ -997,6 +1191,54 @@ class PostgresqlDB(DB):
              int(data.get("step_stage", 1))),
         )
 
+    def insert_payment_records(self, records: list, user_name: str = "") -> int:
+        """PostgreSQL：ON CONFLICT DO NOTHING 跳过重复缴费。"""
+        if not records or self.connect is None or self.connect.closed:
+            return 0
+        sql = f"""INSERT INTO {self.PAYMENT_TABLE}
+            (user_id, user_name, pay_date, ymd, ym, rcv_amt, pay_mode, pay_mode_name,
+             type_code, type_name, chan_cls, chan_name, remark, cons_no, cons_name, penalty)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT DO NOTHING"""
+        inserted = 0
+        cursor = None
+        try:
+            cursor = self.connect.cursor()
+            for row in records:
+                if not isinstance(row, dict) or not row.get("pay_date"):
+                    continue
+                cursor.execute(sql, _payment_row_params(self.user_id, user_name, row))
+                inserted += cursor.rowcount if cursor.rowcount and cursor.rowcount > 0 else 0
+            self.connect.commit()
+        except Exception as exc:
+            self.connect.rollback()
+            logging.error("缴费记录写入失败: %s", exc)
+            return 0
+        finally:
+            if cursor:
+                cursor.close()
+        return inserted
+
+    def get_latest_payment_date(self, user_id: str) -> Optional[str]:
+        if self.connect is None or self.connect.closed:
+            return None
+        cursor = None
+        try:
+            cursor = self.connect.cursor()
+            cursor.execute(
+                f"SELECT pay_date FROM {self.PAYMENT_TABLE} WHERE user_id=%s "
+                "ORDER BY pay_date DESC LIMIT 1",
+                (str(user_id).strip(),),
+            )
+            row = cursor.fetchone()
+            return str(row[0]).strip() if row and row[0] else None
+        except Exception as exc:
+            logging.error("查询最新缴费时间失败: %s", exc)
+            return None
+        finally:
+            if cursor:
+                cursor.close()
+
     def query_month_tou_from_daily(self, user_id: str, month: str) -> Optional[dict]:
         uid = str(user_id).strip()
         month_key = str(month).strip()[:7]
@@ -1057,12 +1299,16 @@ class PostgresqlDB(DB):
         cutoff = (datetime.now() - timedelta(days=retention_days)).strftime("%Y-%m-%d")
         self._execute(f"DELETE FROM {self.DAILY_TABLE} WHERE user_id=%s AND date < %s", (self.user_id, cutoff))
         self._execute(f"DELETE FROM {self.BALANCE_TABLE} WHERE user_id=%s AND as_of < %s", (self.user_id, cutoff))
+        self._execute(
+            f"DELETE FROM {self.PAYMENT_TABLE} WHERE user_id=%s AND LEFT(pay_date,10) < %s",
+            (self.user_id, cutoff),
+        )
         logging.info("已清理户号 %s 早于 %s 的历史数据", self.user_id, cutoff)
 
     def delete_user_data(self, user_id: str) -> None:
         uid = str(user_id).strip()
         for tbl in [self.DAILY_TABLE, self.MONTHLY_TABLE, self.YEARLY_TABLE,
-                     self.BALANCE_TABLE, self.STEP_TABLE, self.USERS_TABLE]:
+                     self.BALANCE_TABLE, self.STEP_TABLE, self.PAYMENT_TABLE, self.USERS_TABLE]:
             self._execute(f"DELETE FROM {tbl} WHERE user_id=%s", (uid,))
         logging.info("已删除户号 %s 的全部数据", user_id)
 

@@ -599,6 +599,199 @@ def get_monthly_chart(user_id: str, months: int = 12) -> List[dict]:
     return list(reversed(rows))
 
 
+def current_quarter_range(today: Optional[datetime] = None) -> tuple:
+    """返回当前自然季起止日期 (YYYY-MM-DD, YYYY-MM-DD)。"""
+    dt = (today or datetime.now()).date()
+    q0 = (dt.month - 1) // 3
+    start_month = q0 * 3 + 1
+    start = dt.replace(month=start_month, day=1)
+    if q0 == 3:
+        end = dt.replace(month=12, day=31)
+    else:
+        end = dt.replace(month=start_month + 3, day=1) - timedelta(days=1)
+    return start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
+
+
+def _normalize_ymd(value: Optional[str]) -> Optional[str]:
+    """校验并规范化 YYYY-MM-DD；非法则返回 None。"""
+    if not value:
+        return None
+    text = str(value).strip()[:10]
+    try:
+        datetime.strptime(text, "%Y-%m-%d")
+        return text
+    except ValueError:
+        return None
+
+
+def get_payments_overview(
+    start: Optional[str] = None,
+    end: Optional[str] = None,
+    recent_limit: int = 25,
+) -> dict:
+    """全户缴费报表（交费记录 Tab）：按日期筛选后的合计、分户、月度、渠道、明细。
+
+    未传 start/end 时默认当前自然季。
+    """
+    empty = {
+        "summary": {
+            "count": 0,
+            "total": 0.0,
+            "avg": 0.0,
+            "user_count": 0,
+            "first_pay": None,
+            "last_pay": None,
+        },
+        "users": [],
+        "months": [],
+        "series": [],
+        "channels": [],
+        "recent": [],
+        "start": None,
+        "end": None,
+    }
+    if not is_db_enabled():
+        return empty
+
+    q_start, q_end = current_quarter_range()
+    start = _normalize_ymd(start) or q_start
+    end = _normalize_ymd(end) or q_end
+    if start > end:
+        start, end = end, start
+    empty["start"], empty["end"] = start, end
+
+    recent_limit = max(1, min(int(recent_limit or 25), 100))
+    # 用 ymd（空则取 pay_date 前 10 位）做区间过滤，兼容各库
+    day_expr = "COALESCE(NULLIF(ymd, ''), SUBSTR(pay_date, 1, 10))"
+    where_day = f"{day_expr} >= ? AND {day_expr} <= ?"
+    day_params = (start, end)
+    name_expr = (
+        "COALESCE(NULLIF(user_name, ''), NULLIF(cons_name, ''), user_id)"
+    )
+    chan_expr = (
+        "COALESCE(NULLIF(chan_cls, ''), NULLIF(pay_mode_name, ''), '未知')"
+    )
+    try:
+        overall_rows = _query(
+            "SELECT COUNT(*) AS cnt, COALESCE(SUM(rcv_amt), 0) AS total, "
+            "COUNT(DISTINCT user_id) AS user_count, "
+            "MIN(pay_date) AS first_pay, MAX(pay_date) AS last_pay "
+            f"FROM payment_records WHERE {where_day}",
+            day_params,
+        )
+        o = overall_rows[0] if overall_rows else {}
+        cnt = int(o.get("cnt") or 0)
+        total = float(o.get("total") or 0)
+        summary = {
+            "count": cnt,
+            "total": round(total, 2),
+            "avg": round(total / cnt, 2) if cnt else 0.0,
+            "user_count": int(o.get("user_count") or 0),
+            "first_pay": o.get("first_pay"),
+            "last_pay": o.get("last_pay"),
+        }
+
+        users_raw = _query(
+            f"SELECT user_id, MAX({name_expr}) AS name, COUNT(*) AS cnt, "
+            f"COALESCE(SUM(rcv_amt), 0) AS total, "
+            f"MIN(pay_date) AS first_pay, MAX(pay_date) AS last_pay "
+            f"FROM payment_records WHERE {where_day} "
+            f"GROUP BY user_id ORDER BY total DESC",
+            day_params,
+        )
+        users = []
+        for u in users_raw or []:
+            users.append({
+                "user_id": u.get("user_id"),
+                "name": u.get("name") or u.get("user_id"),
+                "cnt": int(u.get("cnt") or 0),
+                "total": round(float(u.get("total") or 0), 2),
+                "first_pay": u.get("first_pay"),
+                "last_pay": u.get("last_pay"),
+            })
+
+        month_rows = _query(
+            f"SELECT DISTINCT ym FROM payment_records "
+            f"WHERE {where_day} AND ym IS NOT NULL AND ym != '' ORDER BY ym",
+            day_params,
+        )
+        month_labels = [m.get("ym") for m in (month_rows or []) if m.get("ym")]
+        by_user_month = _query(
+            f"SELECT ym, user_id, MAX({name_expr}) AS name, "
+            f"COALESCE(SUM(rcv_amt), 0) AS total "
+            f"FROM payment_records "
+            f"WHERE {where_day} AND ym IS NOT NULL AND ym != '' "
+            f"GROUP BY ym, user_id",
+            day_params,
+        )
+        pivot: dict = {}
+        for row in by_user_month or []:
+            uid = row.get("user_id")
+            ym = row.get("ym")
+            if not uid or not ym:
+                continue
+            if uid not in pivot:
+                pivot[uid] = {"name": row.get("name") or uid, "map": {}}
+            pivot[uid]["map"][ym] = round(float(row.get("total") or 0), 2)
+        series = []
+        for u in users:
+            uid = u["user_id"]
+            info = pivot.get(uid) or {"name": u["name"], "map": {}}
+            series.append({
+                "user_id": uid,
+                "name": info.get("name") or u["name"],
+                "data": [float(info["map"].get(ym) or 0) for ym in month_labels],
+            })
+
+        channels_raw = _query(
+            f"SELECT {chan_expr} AS chan, COUNT(*) AS cnt, "
+            f"COALESCE(SUM(rcv_amt), 0) AS total "
+            f"FROM payment_records WHERE {where_day} "
+            f"GROUP BY {chan_expr} ORDER BY total DESC",
+            day_params,
+        )
+        channels = []
+        for c in channels_raw or []:
+            channels.append({
+                "chan": c.get("chan") or "未知",
+                "cnt": int(c.get("cnt") or 0),
+                "total": round(float(c.get("total") or 0), 2),
+            })
+
+        recent_raw = _query(
+            f"SELECT user_id, {name_expr} AS name, pay_date, rcv_amt, "
+            f"pay_mode_name, type_name, chan_cls, chan_name, remark "
+            f"FROM payment_records WHERE {where_day} "
+            f"ORDER BY pay_date DESC LIMIT ?",
+            (*day_params, recent_limit),
+        )
+        recent = []
+        for r in recent_raw or []:
+            recent.append({
+                "user_id": r.get("user_id"),
+                "name": r.get("name") or r.get("user_id"),
+                "pay_date": r.get("pay_date"),
+                "rcv_amt": r.get("rcv_amt"),
+                "pay_mode_name": r.get("pay_mode_name"),
+                "type_name": r.get("type_name"),
+                "chan_cls": r.get("chan_cls") or r.get("chan_name"),
+                "remark": r.get("remark"),
+            })
+
+        return {
+            "summary": summary,
+            "users": users,
+            "months": month_labels,
+            "series": series,
+            "channels": channels,
+            "recent": recent,
+            "start": start,
+            "end": end,
+        }
+    except Exception:
+        return empty
+
+
 def tail_log(lines: int = 200) -> List[str]:
     """读取 app.log 全部内容（由 TimedRotatingFileHandler 按天轮转管理文件大小）。"""
     path = os.path.join(get_data_dir(), "app.log")

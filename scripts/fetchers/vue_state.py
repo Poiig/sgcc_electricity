@@ -43,7 +43,15 @@ const wantedKeys = [
   'selectYear',
   'listData',
   'yeData',
-  'elecItemData'
+  'elecItemData',
+  'payLists',
+  'payList',
+  'begin',
+  'ending',
+  'recordNum',
+  'pageNo',
+  'count',
+  'callpay'
 ];
 return Array.from(document.querySelectorAll('*'))
   .map((el, index) => {
@@ -152,6 +160,64 @@ def normalize_bill_detail(components: list[dict[str, Any]]) -> dict[str, Any]:
         "peak_usage": _safe_float(pv_qty.get("peakQty")),
         "tip_usage": _safe_float(pv_qty.get("sharpQty")),
         "raw": bill,
+    }
+
+
+def normalize_payment_records(components: list[dict[str, Any]], expected_user_id: str = "") -> dict[str, Any]:
+    """从交费记录页 Vue state 提取 payLists。
+
+    payLists 挂在组件实例上（未必在 $data）；单条含 payDate/rcvAmt/payModeName 等。
+    """
+    rows = _first_data_value(components, "payLists") or _first_data_value(components, "payList") or []
+    if not isinstance(rows, list):
+        rows = []
+    electric = _first_data_value(components, "electric") or {}
+    if not isinstance(electric, dict):
+        electric = {}
+    cons_no = str(
+        electric.get("consNo_dst")
+        or _first_data_value(components, "consNo")
+        or ""
+    ).strip()
+    expected = str(expected_user_id or "").strip()
+    records = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        item = _normalize_payment_row(row)
+        if not item.get("pay_date"):
+            continue
+        if expected and item.get("cons_no") and item["cons_no"] != expected:
+            continue
+        records.append(item)
+    return {
+        "user_id": cons_no or expected,
+        "begin": _first_data_value(components, "begin") or "",
+        "ending": _first_data_value(components, "ending") or "",
+        "count": _safe_float(_first_data_value(components, "count"), default=None),
+        "records": records,
+        "user_mismatch": bool(expected and cons_no and cons_no != expected),
+    }
+
+
+def _normalize_payment_row(row: dict[str, Any]) -> dict[str, Any]:
+    """规范化单条交费记录字段名，便于入库。"""
+    pay_date = str(row.get("payDate") or "").strip()
+    return {
+        "pay_date": pay_date,
+        "ymd": str(row.get("ymd") or (pay_date[:10] if pay_date else "")).strip(),
+        "ym": _normalize_ym(row.get("ym") or (pay_date[:7] if pay_date else "")),
+        "rcv_amt": _safe_float(row.get("rcvAmt"), default=0.0) or 0.0,
+        "pay_mode": str(row.get("payMode") or "").strip(),
+        "pay_mode_name": str(row.get("payModeName") or "").strip(),
+        "type_code": str(row.get("typeCode") or "").strip(),
+        "type_name": str(row.get("typeName") or "").strip(),
+        "chan_cls": str(row.get("chanCls") or "").strip(),
+        "chan_name": str(row.get("chanName") or "").strip(),
+        "remark": str(row.get("remark") or "").strip(),
+        "cons_no": str(row.get("consNo") or "").strip(),
+        "cons_name": str(row.get("consName") or "").strip(),
+        "penalty": str(row.get("penalty") or "").strip(),
     }
 
 

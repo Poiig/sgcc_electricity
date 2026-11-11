@@ -889,6 +889,38 @@ class DataFetcher:
                     skipped_users.append(user_id)
                     continue
 
+                # 仅测交费记录：扫码登录后跳过余额/用电，只跑 paymentRecord
+                only_payment = os.getenv("FETCH_ONLY_PAYMENT", "").strip().lower() in (
+                    "1", "true", "yes",
+                )
+                if only_payment:
+                    logging.info(f"[{user_id}] FETCH_ONLY_PAYMENT=1，仅抓取交费记录")
+                    payment_rows = self._get_payment_records(driver, user_id, userid_index)
+                    if self.db is not None:
+                        if not self.db.connect_user_db(user_id):
+                            logging.error(f"[{user_id}] 数据库连接失败, 交费记录未写入")
+                            failed_users.append(user_id)
+                            continue
+                        try:
+                            user_name = self._user_name_map.get(user_id, "")
+                            self._db_insert(user_id, "用户信息", self.db.upsert_user, user_id, self._username, user_name)
+                            if payment_rows:
+                                n = self.db.insert_payment_records(payment_rows, user_name)
+                                logging.info(f"[{user_id}] 交费记录新写入 {n}/{len(payment_rows)} 条（重复已跳过）")
+                            else:
+                                logging.warning(f"[{user_id}] 未取到交费记录")
+                                failed_users.append(user_id)
+                                continue
+                        finally:
+                            self.db.close_connect()
+                    fetch_results.append({
+                        "user_id": user_id,
+                        "user_name": self._user_name_map.get(user_id, user_id),
+                        "payment_count": len(payment_rows or []),
+                    })
+                    time.sleep(self._step_wait)
+                    continue
+
                 driver.get(BALANCE_URL)
                 time.sleep(self._step_wait)
                 logging.info(f"正在 userAcc 页面切换到用户 [{user_id}]...")
@@ -1473,6 +1505,10 @@ class DataFetcher:
             else:
                 date_list, usage_list = [], []
 
+            payment_records = None
+            if os.getenv("FETCH_PAYMENT_RECORDS", "true").strip().lower() in ("1", "true", "yes"):
+                payment_records = self._get_payment_records(driver, user_id, userid_index)
+
             logging.info(f"[{user_id}] 日用电拉取完成，开始写入 {self.db_type.upper()} 数据库")
             self._save_user_data(
                 user_id, balance, enhanced_balance,
@@ -1482,6 +1518,7 @@ class DataFetcher:
                 yearly_charge, yearly_usage,
                 tou_data, bill_tou_data, user_name,
                 step_data=step_data,
+                payment_records=payment_records,
             )
         else:
             logging.info(f"[{user_id}] 未配置数据库, 跳过数据存储")
@@ -2216,13 +2253,194 @@ class DataFetcher:
             logging.warning(f"[{user_id}] 获取账单分时数据异常: {e}")
             return None
 
+    def _peek_latest_payment_date(self, user_id: str) -> Optional[str]:
+        """读取库中该户最新缴费时间，供增量分页截止；临时连库后关闭。"""
+        if self.db is None:
+            return None
+        if not self.db.connect_user_db(user_id):
+            return None
+        try:
+            latest = self.db.get_latest_payment_date(user_id)
+            if latest:
+                logging.info(f"[{user_id}] 库中最新缴费时间: {latest}（增量模式）")
+            else:
+                logging.info(f"[{user_id}] 库中尚缴费记录，将拉取最近一年全部分页")
+            return latest
+        finally:
+            self.db.close_connect()
+
+    def _get_payment_records(self, driver, user_id, userid_index):
+        """打开交费页 → 点「最近1年」→ 按分页依次拉取；有库内最新时间则增量截止。"""
+        try:
+            logging.info(f"[{user_id}] 开始查询交费记录...")
+            latest = self._peek_latest_payment_date(user_id)
+
+            driver.get(PAYMENT_RECORD_URL)
+            time.sleep(self._step_wait * 2)
+
+            current = self._get_current_userid(driver)
+            if current != user_id:
+                logging.info(f"[{user_id}] 交费页当前户号={current or '未知'}, 正在切换...")
+                if not self._switch_to_user(driver, user_id, userid_index):
+                    logging.warning(
+                        f"[{user_id}] 交费页用户切换失败, 当前户号={self._get_current_userid(driver) or '未知'}"
+                    )
+                    return None
+            else:
+                logging.info(f"[{user_id}] 交费页户号已正确, 无需切换")
+
+            if not self._click_payment_last_year(driver):
+                logging.warning(f"[{user_id}] 未能点击「最近1年」，继续尝试读取当前列表")
+            self._wait_payment_list_loaded(driver)
+
+            all_records: list = []
+            seen_keys = set()
+            max_pages = 50
+            for page in range(1, max_pages + 1):
+                components = vue_state.selected_vue_data(driver)
+                info = vue_state.normalize_payment_records(components, expected_user_id=user_id)
+                if info.get("user_mismatch"):
+                    logging.warning(
+                        f"[{user_id}] 交费记录户号不匹配: page={info.get('user_id')}, skip"
+                    )
+                    return None
+                page_rows = info.get("records") or []
+                if not page_rows and page == 1:
+                    logging.warning(f"[{user_id}] 交费记录为空 (count={info.get('count')})")
+                    return []
+
+                new_on_page = 0
+                for row in page_rows:
+                    key = (
+                        row.get("pay_date"),
+                        row.get("rcv_amt"),
+                        row.get("type_code"),
+                        row.get("pay_mode"),
+                    )
+                    if key in seen_keys:
+                        continue
+                    seen_keys.add(key)
+                    all_records.append(row)
+                    new_on_page += 1
+
+                oldest = min((r.get("pay_date") or "" for r in page_rows), default="")
+                newest = max((r.get("pay_date") or "" for r in page_rows), default="")
+                logging.info(
+                    f"[{user_id}] 交费第 {page} 页: {len(page_rows)} 条 "
+                    f"({newest} ~ {oldest}), 累计 {len(all_records)}"
+                )
+
+                # 列表按时间倒序：本页最旧一条已不新于库内最新，后面页更旧，可停
+                if latest and oldest and oldest <= latest:
+                    logging.info(
+                        f"[{user_id}] 增量截止: 本页最旧 {oldest} <= 库内最新 {latest}"
+                    )
+                    break
+
+                if not self._click_payment_next_page(driver):
+                    break
+                self._wait_payment_list_loaded(driver)
+
+            if all_records:
+                sample = all_records[0]
+                logging.info(
+                    f"[{user_id}] 交费记录合计 {len(all_records)} 条, 例: {sample.get('pay_date')} "
+                    f"金额={sample.get('rcv_amt')}元 类型={sample.get('pay_mode_name')}"
+                )
+            return all_records
+        except Exception as e:
+            logging.warning(f"[{user_id}] 交费记录查询异常: {e}")
+            return None
+
+    def _click_payment_last_year(self, driver) -> bool:
+        """先点「最近1年」触发按年查询（优先 Vue clickDate(1)，DOM 兜底）。"""
+        try:
+            result = driver.execute_script("""
+                const rootEl = document.querySelector('#app');
+                const root = rootEl && rootEl.__vue__;
+                function findVm(c, depth) {
+                  if (!c || depth > 10) return null;
+                  const d = c.$data || {};
+                  if ('recordNum' in d || c.payLists !== undefined || typeof c.clickDate === 'function') return c;
+                  for (const ch of (c.$children || [])) {
+                    const hit = findVm(ch, depth + 1);
+                    if (hit) return hit;
+                  }
+                  return null;
+                }
+                const vm = root && findVm(root, 0);
+                if (vm && typeof vm.clickDate === 'function') {
+                  vm.clickDate(1);
+                  return { ok: true, via: 'vue' };
+                }
+                const links = Array.from(document.querySelectorAll('.tab a, a'));
+                const a = links.find(el => /最近\\s*1\\s*年/.test((el.textContent || '').trim()));
+                if (a) { a.click(); return { ok: true, via: 'dom' }; }
+                return { ok: false };
+            """)
+            if result and result.get("ok"):
+                logging.info(f"已点击「最近1年」({result.get('via')})")
+                time.sleep(self._step_wait * 2)
+                return True
+            return False
+        except Exception as e:
+            logging.debug(f"点击「最近1年」失败: {e}")
+            return False
+
+    def _click_payment_next_page(self, driver) -> bool:
+        """点交费列表下一页；没有下一页或按钮禁用则返回 False。"""
+        try:
+            result = driver.execute_script("""
+                const next = document.querySelector('button.next:not(.disabled)');
+                if (!next) return { ok: false, reason: 'no-next' };
+                if (next.disabled || next.classList.contains('disabled')) {
+                  return { ok: false, reason: 'disabled' };
+                }
+                next.click();
+                return { ok: true };
+            """)
+            if result and result.get("ok"):
+                time.sleep(self._step_wait)
+                return True
+            return False
+        except Exception as e:
+            logging.debug(f"交费下一页失败: {e}")
+            return False
+
+    def _wait_payment_list_loaded(self, driver, timeout: int = 25) -> None:
+        """等待交费时间轴/列表出现，或明确无数据提示。"""
+        def _loaded(d):
+            return d.execute_script("""
+                if (document.querySelector('.timeline-item') || document.querySelector('.card-Amt')) return true;
+                const rootEl = document.querySelector('#app');
+                const root = rootEl && rootEl.__vue__;
+                if (!root) return false;
+                let hit = null;
+                function walk(c, depth) {
+                  if (!c || depth > 10 || hit) return;
+                  if (Array.isArray(c.payLists)) hit = c;
+                  (c.$children || []).forEach(function (ch) { walk(ch, depth + 1); });
+                }
+                walk(root, 0);
+                if (!hit) return false;
+                if (hit.payLists && hit.payLists.length > 0) return true;
+                if (hit.tipsShow || hit.error) return true;
+                return false;
+            """)
+
+        try:
+            WebDriverWait(driver, timeout).until(_loaded)
+        except Exception:
+            logging.debug("交费记录加载等待超时, 继续尝试解析")
+        time.sleep(self._step_wait)
+
     def _save_user_data(self, user_id, balance, enhanced_balance,
                         last_daily_date, last_daily_usage,
                         date_list, usage_list,
                         month, month_usage, month_charge,
                         yearly_charge, yearly_usage,
                         tou_data=None, bill_tou_data=None, user_name="",
-                        step_data=None):
+                        step_data=None, payment_records=None):
         if not self.db.connect_user_db(user_id):
             logging.error(f"[{user_id}] 数据库连接失败, 数据未写入")
             return
@@ -2344,7 +2562,17 @@ class DataFetcher:
                 if self._db_insert(user_id, f"阶梯用电 {step_data.get('year_month')}", self.db.insert_step_data, step_data):
                     logging.info(f"[{user_id}] 阶梯用电数据已写入: {step_data.get('year_month')}")
 
-            # 数据清理（仅过期日数据/余额，不删阶梯和其他汇总）
+            # 写入交费记录（主键冲突则跳过，实现去重）
+            if payment_records:
+                try:
+                    n = self.db.insert_payment_records(payment_records, user_name)
+                    logging.info(
+                        f"[{user_id}] 交费记录新写入 {n}/{len(payment_records)} 条（重复已跳过）"
+                    )
+                except Exception as e:
+                    logging.warning(f"[{user_id}] 交费记录写入异常: {e}")
+
+            # 数据清理（仅过期日数据/余额/交费，不删阶梯和其他汇总）
             self.db.cleanup_old_data()
             logging.info(f"[{user_id}] 数据清理完成")
 

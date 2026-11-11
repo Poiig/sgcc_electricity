@@ -17,8 +17,10 @@ from fastapi.responses import FileResponse, JSONResponse
 from const import load_project_env
 from dashboard_db import (
     db_available,
+    current_quarter_range,
     get_daily_chart,
     get_monthly_chart,
+    get_payments_overview,
     get_user_summary,
     is_db_enabled,
     latest_balance_log_timestamp,
@@ -233,6 +235,30 @@ def _register_routes(router: APIRouter) -> None:
         if not is_db_enabled():
             return {"user_id": user_id, "months": months, "data": [], "db_enabled": False}
         return {"user_id": user_id, "months": months, "data": get_monthly_chart(user_id, months), "db_enabled": True}
+
+    @router.get("/api/payments/report", dependencies=[Depends(require_auth)])
+    def api_payments_overview(
+        start: Optional[str] = Query(None, description="起始日 YYYY-MM-DD，默认本季初"),
+        end: Optional[str] = Query(None, description="结束日 YYYY-MM-DD，默认本季末"),
+        recent_limit: int = Query(25, ge=1, le=100),
+    ):
+        """全户交费记录报表（交费记录 Tab）；未传日期时默认当前自然季。"""
+        if not is_db_enabled():
+            q_start, q_end = current_quarter_range()
+            return {
+                "db_enabled": False,
+                "summary": {
+                    "count": 0, "total": 0, "avg": 0, "user_count": 0,
+                    "first_pay": None, "last_pay": None,
+                },
+                "users": [], "months": [], "series": [], "channels": [], "recent": [],
+                "start": start or q_start,
+                "end": end or q_end,
+            }
+        return {
+            "db_enabled": True,
+            **get_payments_overview(start=start, end=end, recent_limit=recent_limit),
+        }
 
     @router.post("/api/fetch", dependencies=[Depends(require_auth)])
     def api_fetch():

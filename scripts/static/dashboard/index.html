@@ -641,6 +641,90 @@
       overflow: hidden;
     }
 
+    /* 交费记录 Tab：月度堆叠柱图 + 渠道环图 */
+    #rowPaymentCharts {
+      display: grid;
+      grid-template-columns: minmax(0, 1.6fr) minmax(260px, 1fr);
+      gap: 1rem;
+      min-width: 0;
+    }
+
+    #rowPaymentCharts.hidden {
+      display: none;
+    }
+
+    #rowPaymentCharts > .card {
+      min-width: 0;
+      max-width: 100%;
+      overflow: hidden;
+    }
+
+    #paymentStats {
+      margin-top: 0.35rem;
+    }
+
+    .payment-user-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1rem;
+    }
+
+    .payment-user-grid:empty {
+      display: none;
+    }
+
+    .payment-chan-wrap {
+      position: relative;
+      height: 220px;
+      min-width: 0;
+    }
+
+    .payment-filter {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem 0.65rem;
+      margin: 0.65rem 0 0.85rem;
+    }
+
+    .payment-filter .pay-preset {
+      border: 1px solid var(--border);
+      background: transparent;
+      color: var(--text);
+      padding: 0.28rem 0.7rem;
+      border-radius: 999px;
+      font-size: 0.82rem;
+      cursor: pointer;
+    }
+
+    .payment-filter .pay-preset.active {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+
+    .payment-filter .pay-range {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      margin-left: auto;
+      flex-wrap: wrap;
+    }
+
+    .payment-filter .pay-range input[type="date"] {
+      background: var(--surface-deep);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.28rem 0.45rem;
+      font-size: 0.82rem;
+    }
+
+    .payment-filter .pay-apply {
+      padding: 0.28rem 0.75rem;
+      font-size: 0.82rem;
+    }
+
     .grid-2 {
       display: grid;
       grid-template-columns: 1fr 1fr;
@@ -649,6 +733,14 @@
 
     @media (max-width: 960px) {
       #rowStepMonthly.has-step {
+        grid-template-columns: 1fr;
+      }
+
+      #rowPaymentCharts {
+        grid-template-columns: 1fr;
+      }
+
+      .payment-user-grid {
         grid-template-columns: 1fr;
       }
 
@@ -2034,6 +2126,11 @@
             <path d="M3 3v18h18" />
             <path d="M7 14l4-4 4 4 5-5" />
           </svg><span class="tab-text">监控</span></button>
+        <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="payments" aria-label="交费记录"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="5" width="20" height="14" rx="2" />
+            <line x1="2" y1="10" x2="22" y2="10" />
+          </svg><span class="tab-text">交费记录</span></button>
         <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="logs" aria-label="运行日志"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
@@ -2080,6 +2177,43 @@
       </div>
     </div>
 
+    <div id="panelPayments" class="panel" role="region" aria-label="交费记录" aria-hidden="true">
+      <div class="card">
+        <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>缴费记录报表 · <span id="paymentHint" class="sub">加载中</span></h2>
+        <div class="payment-filter" id="paymentFilter">
+          <button type="button" class="pay-preset active" data-range="quarter">本季</button>
+          <button type="button" class="pay-preset" data-range="last_quarter">上季</button>
+          <button type="button" class="pay-preset" data-range="year">本年</button>
+          <button type="button" class="pay-preset" data-range="last12">近一年</button>
+          <button type="button" class="pay-preset" data-range="all">全部</button>
+          <div class="pay-range">
+            <label for="payStart">从</label>
+            <input type="date" id="payStart" aria-label="起始日期" />
+            <label for="payEnd">至</label>
+            <input type="date" id="payEnd" aria-label="结束日期" />
+            <button type="button" class="pay-apply" id="payApplyBtn">查询</button>
+          </div>
+        </div>
+        <div id="paymentStats" class="stats"></div>
+      </div>
+      <div id="paymentUserCards" class="payment-user-grid"></div>
+      <div id="rowPaymentCharts" class="hidden">
+        <div class="card">
+          <h2>月度缴费金额（元）</h2>
+          <div class="chart-wrap tall"><canvas id="paymentMonthlyChart"></canvas></div>
+        </div>
+        <div class="card">
+          <h2>渠道金额占比</h2>
+          <div class="chart-wrap payment-chan-wrap"><canvas id="paymentChanChart"></canvas></div>
+          <div id="paymentChanTable" style="margin-top:0.75rem"></div>
+        </div>
+      </div>
+      <div class="card">
+        <h2>最近缴费</h2>
+        <div id="paymentWrap"><p class="hint">暂无缴费记录</p></div>
+      </div>
+    </div>
+
     <div id="panelLogs" class="panel" role="region" aria-label="运行日志">
       <div class="card">
         <h2><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4.03 3 9 3s9-1.34 9-3V5"/><path d="M3 11v6c0 1.66 4.03 3 9 3s9-1.34 9-3v-6"/></svg>数据库运行记录 · <span id="logHint" class="sub">balance_log</span></h2>
@@ -2112,7 +2246,10 @@
   <script>
     Chart.register(ChartDataLabels);
     const $ = (id) => document.getElementById(id);
-    let dailyComboChart, monthlyChart, stepPieChart;
+    let dailyComboChart, monthlyChart, stepPieChart, paymentMonthlyChart, paymentChanChart;
+    let lastPaymentOverview = null;
+    let paymentsLoadedKey = "";
+    let paymentRangePreset = "quarter";
     let stepPieRenderToken = 0;
     let sessionToken = sessionStorage.getItem("dashboard_session") || "";
     let loginRequired = false;
@@ -2158,6 +2295,7 @@
       if (rerenderCharts && lastDailyData.length) renderDailyComboChart(lastDailyData);
       if (rerenderCharts && lastMonthlyData.length) renderMonthlyChart(lastMonthlyData);
       if (rerenderCharts && lastSummary && hasStepData(lastSummary)) renderStepCard(lastSummary);
+      if (rerenderCharts && lastPaymentOverview) renderPaymentsOverview(lastPaymentOverview);
       /* 通知 popover 等订阅者：主题已变，预设需跟随刷新 */
       document.documentElement.dispatchEvent(new CustomEvent("data-theme-change", { detail: { resolved } }));
     }
@@ -2511,6 +2649,8 @@
       if (monthlyChart) monthlyChart.resize();
       if (stepPieChart) stepPieChart.resize();
       if (dailyComboChart) dailyComboChart.resize();
+      if (paymentMonthlyChart) paymentMonthlyChart.resize();
+      if (paymentChanChart) paymentChanChart.resize();
     }
 
     /* 阶梯卡片显隐会改变月图表列宽，需等 grid 布局稳定后再绘制/resize */
@@ -2520,6 +2660,16 @@
           if (daily && lastDailyData.length) renderDailyComboChart(lastDailyData);
           if (monthly && lastMonthlyData.length) renderMonthlyChart(lastMonthlyData);
           reflowMonitorCharts();
+        });
+      });
+    }
+
+    function schedulePaymentChartsPaint() {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (lastPaymentOverview) renderPaymentsOverview(lastPaymentOverview);
+          if (paymentMonthlyChart) paymentMonthlyChart.resize();
+          if (paymentChanChart) paymentChanChart.resize();
         });
       });
     }
@@ -2872,6 +3022,252 @@
       target.querySelector(".retry-btn").onclick = retryFn;
     }
 
+    const PAYMENT_CHAN_COLORS = ["#00716b", "#3b82f6", "#f59e0b", "#8b5cf6", "#ef4444", "#64748b", "#14b8a6"];
+    const PAYMENT_USER_COLORS = ["#00716b", "#3b82f6", "#f59e0b", "#8b5cf6", "#ef4444", "#14b8a6"];
+
+    function renderPaymentsOverview(report) {
+      lastPaymentOverview = report || null;
+      const statsEl = $("paymentStats");
+      const usersEl = $("paymentUserCards");
+      const chartsEl = $("rowPaymentCharts");
+      const hint = $("paymentHint");
+      const wrap = $("paymentWrap");
+      const chanTable = $("paymentChanTable");
+      const summary = (report && report.summary) || {};
+      const users = (report && report.users) || [];
+      const months = (report && report.months) || [];
+      const series = (report && report.series) || [];
+      const channels = (report && report.channels) || [];
+      const recent = (report && report.recent) || [];
+      const cnt = Number(summary.count || 0);
+      const total = Number(summary.total || 0);
+      const avg = Number(summary.avg || 0);
+      const userCount = Number(summary.user_count || users.length || 0);
+      const first = summary.first_pay ? String(summary.first_pay).slice(0, 10) : "—";
+      const last = summary.last_pay ? String(summary.last_pay).slice(0, 10) : "—";
+
+      if (!cnt) {
+        statsEl.innerHTML = "";
+        usersEl.innerHTML = "";
+        chartsEl.classList.add("hidden");
+        chanTable.innerHTML = "";
+        hint.textContent = "暂无数据";
+        wrap.innerHTML = '<p class="hint">暂无缴费记录。完成一次同步后将在此显示。</p>';
+        if (paymentMonthlyChart) { paymentMonthlyChart.destroy(); paymentMonthlyChart = null; }
+        if (paymentChanChart) { paymentChanChart.destroy(); paymentChanChart = null; }
+        return;
+      }
+
+      const rangeStart = report.start || first;
+      const rangeEnd = report.end || last;
+      hint.textContent = `${rangeStart} ~ ${rangeEnd} · ${userCount} 个户号`;
+      statsEl.innerHTML = [
+        { label: "合计金额", value: fmtNum(total, "元") },
+        { label: "缴费笔数", value: String(cnt) },
+        { label: "笔均金额", value: fmtNum(avg, "元") },
+        { label: "户号数", value: String(userCount) },
+      ].map(it =>
+        `<div class="stat"><div class="label"><span>${it.label}</span></div><div class="value">${it.value}</div></div>`
+      ).join("");
+
+      usersEl.innerHTML = users.map(u => {
+        const f = u.first_pay ? String(u.first_pay).slice(0, 10) : "—";
+        const l = u.last_pay ? String(u.last_pay).slice(0, 10) : "—";
+        return `<div class="card">
+          <h2>${escapeHtml(u.name || u.user_id)} · <span class="sub">${escapeHtml(u.user_id || "")}</span></h2>
+          <div class="stats">
+            <div class="stat"><div class="label"><span>合计</span></div><div class="value">${fmtNum(u.total, "元")}</div></div>
+            <div class="stat"><div class="label"><span>笔数</span></div><div class="value">${u.cnt || 0}</div></div>
+          </div>
+          <p class="hint" style="margin-top:0.5rem">${f} → ${l}</p>
+        </div>`;
+      }).join("");
+
+      chartsEl.classList.remove("hidden");
+      const ct = chartTheme();
+      paymentMonthlyChart = upsertChart(paymentMonthlyChart, $("paymentMonthlyChart"), {
+        type: "bar",
+        data: {
+          labels: months,
+          datasets: series.map((s, i) => {
+            const color = PAYMENT_USER_COLORS[i % PAYMENT_USER_COLORS.length];
+            return {
+              label: s.name || s.user_id,
+              data: s.data || [],
+              backgroundColor: color,
+              borderWidth: 0,
+              borderRadius: i === series.length - 1 ? 6 : 0,
+              borderSkipped: false,
+              stack: "pay",
+            };
+          }),
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { labels: { color: ct.muted } },
+            tooltip: buildChartTooltip(),
+            datalabels: { display: false },
+          },
+          scales: {
+            x: { stacked: true, ticks: { color: ct.muted, maxRotation: 45, autoSkip: true, maxTicksLimit: 13 }, grid: { color: ct.grid } },
+            y: { stacked: true, ticks: { color: ct.muted }, grid: { color: ct.grid }, grace: "10%", title: { display: true, text: "元", color: ct.muted } },
+          },
+        },
+      });
+
+      paymentChanChart = upsertChart(paymentChanChart, $("paymentChanChart"), {
+        type: "doughnut",
+        data: {
+          labels: channels.map(c => c.chan),
+          datasets: [{
+            data: channels.map(c => c.total),
+            backgroundColor: channels.map((_, i) => PAYMENT_CHAN_COLORS[i % PAYMENT_CHAN_COLORS.length]),
+            borderColor: ct.pointBorder,
+            borderWidth: 1,
+            hoverOffset: 6,
+          }],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          cutout: "62%",
+          plugins: {
+            legend: {
+              position: "bottom",
+              labels: { color: ct.muted, boxWidth: 10, font: { size: 11 } },
+            },
+            tooltip: {
+              ...buildChartTooltip(),
+              callbacks: {
+                label(ctx) {
+                  const v = Number(ctx.parsed || 0);
+                  const pct = total > 0 ? ((v / total) * 100).toFixed(1) : "0";
+                  const row = channels[ctx.dataIndex];
+                  const n = row ? row.cnt : 0;
+                  return ` ${ctx.label}: ${v.toFixed(2)} 元 (${pct}%, ${n} 笔)`;
+                },
+              },
+            },
+            datalabels: { display: false },
+          },
+        },
+      });
+
+      chanTable.innerHTML = `<table class="sync-table">
+        <thead><tr><th>渠道</th><th>金额(元)</th><th>占比</th><th>笔数</th></tr></thead>
+        <tbody>${channels.map(c => {
+          const pct = total > 0 ? ((Number(c.total) / total) * 100).toFixed(1) : "0.0";
+          return `<tr>
+            <td>${escapeHtml(c.chan || "—")}</td>
+            <td>${Number(c.total || 0).toFixed(2)}</td>
+            <td>${pct}%</td>
+            <td>${c.cnt || 0}</td>
+          </tr>`;
+        }).join("")}</tbody></table>`;
+
+      wrap.innerHTML = `<table class="sync-table">
+        <thead><tr><th>时间</th><th>户名</th><th>金额(元)</th><th>渠道</th><th>类型</th><th>备注</th></tr></thead>
+        <tbody>${recent.map(r => `<tr>
+          <td>${escapeHtml(r.pay_date || "—")}</td>
+          <td>${escapeHtml(r.name || r.user_id || "—")}</td>
+          <td>${r.rcv_amt != null ? r.rcv_amt : "—"}</td>
+          <td>${escapeHtml(r.chan_cls || "—")}</td>
+          <td>${escapeHtml(r.type_name || r.pay_mode_name || "—")}</td>
+          <td>${escapeHtml(r.remark || "—")}</td>
+        </tr>`).join("")}</tbody></table>`;
+    }
+
+    function fmtDateISO(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      return `${y}-${m}-${day}`;
+    }
+
+    function quarterBounds(base = new Date()) {
+      const y = base.getFullYear();
+      const q0 = Math.floor(base.getMonth() / 3);
+      const start = new Date(y, q0 * 3, 1);
+      const end = new Date(y, q0 * 3 + 3, 0);
+      return { start: fmtDateISO(start), end: fmtDateISO(end) };
+    }
+
+    function paymentRangeBounds(preset) {
+      const today = new Date();
+      if (preset === "quarter") return quarterBounds(today);
+      if (preset === "last_quarter") {
+        const prev = new Date(today.getFullYear(), today.getMonth() - 3, 1);
+        return quarterBounds(prev);
+      }
+      if (preset === "year") {
+        return { start: `${today.getFullYear()}-01-01`, end: `${today.getFullYear()}-12-31` };
+      }
+      if (preset === "last12") {
+        const start = new Date(today.getFullYear(), today.getMonth() - 11, 1);
+        return { start: fmtDateISO(start), end: fmtDateISO(today) };
+      }
+      if (preset === "all") return { start: "2000-01-01", end: "2099-12-31" };
+      return {
+        start: $("payStart").value || quarterBounds(today).start,
+        end: $("payEnd").value || quarterBounds(today).end,
+      };
+    }
+
+    function setPaymentPresetActive(preset) {
+      paymentRangePreset = preset;
+      document.querySelectorAll("#paymentFilter .pay-preset").forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.range === preset);
+      });
+    }
+
+    function syncPaymentDateInputs(start, end) {
+      if ($("payStart")) $("payStart").value = start || "";
+      if ($("payEnd")) $("payEnd").value = end || "";
+    }
+
+    function initPaymentFilterDefaults() {
+      const { start, end } = paymentRangeBounds("quarter");
+      setPaymentPresetActive("quarter");
+      syncPaymentDateInputs(start, end);
+    }
+
+    async function loadPaymentsOverview(force = false) {
+      if (!dbEnabled) return;
+      let start = $("payStart")?.value;
+      let end = $("payEnd")?.value;
+      if (!start || !end) {
+        const bounds = paymentRangeBounds(paymentRangePreset || "quarter");
+        start = bounds.start;
+        end = bounds.end;
+        syncPaymentDateInputs(start, end);
+      }
+      if (start > end) {
+        const tmp = start; start = end; end = tmp;
+        syncPaymentDateInputs(start, end);
+      }
+      const cacheKey = `${start}|${end}`;
+      if (!force && paymentsLoadedKey === cacheKey && lastPaymentOverview) {
+        schedulePaymentChartsPaint();
+        return;
+      }
+      $("paymentHint").textContent = "加载中...";
+      try {
+        const q = new URLSearchParams({ start, end, recent_limit: "50" });
+        const report = await api(`/api/payments/report?${q}`);
+        paymentsLoadedKey = cacheKey;
+        if (report.start && report.end) syncPaymentDateInputs(report.start, report.end);
+        renderPaymentsOverview(report);
+        schedulePaymentChartsPaint();
+      } catch (e) {
+        $("paymentHint").textContent = "加载失败";
+        showError($("paymentWrap"), "加载失败：" + e.message, () => loadPaymentsOverview(true));
+        toast(e.message, "error");
+      }
+    }
+
     async function loadUser(userId) {
       if (!userId || !dbEnabled) return;
       showSkeleton();
@@ -3001,6 +3397,7 @@
       await loadStatus();
       if (dbEnabled) await loadUsers();
       if (activeTab === "logs") await loadLogs();
+      if (activeTab === "payments" && dbEnabled) await loadPaymentsOverview(true);
       const uid = $("userSelect").value;
       if (uid && activeTab === "monitor" && dbEnabled) await loadUser(uid);
     }
@@ -3109,7 +3506,7 @@
       catch (e) { toast(e.message, "error"); }
     });
 
-    /* 快捷键：R 刷新，S 同步，1/2/3 切换 tab */
+    /* 快捷键：R 刷新，S 同步，1/2/3/4 切换 tab */
     document.addEventListener("keydown", (e) => {
       if (e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA" || e.target.tagName === "SELECT") return;
       if (e.ctrlKey || e.altKey || e.metaKey) return;
@@ -3117,9 +3514,32 @@
       if (k === "r") { e.preventDefault(); $("refreshBtn").click(); }
       else if (k === "s") { e.preventDefault(); $("fetchBtn").click(); }
       else if (k === "1") switchTab("monitor");
-      else if (k === "2") switchTab("logs");
-      else if (k === "3") switchTab("env");
+      else if (k === "2") switchTab("payments");
+      else if (k === "3") switchTab("logs");
+      else if (k === "4") switchTab("env");
     });
+
+    document.querySelectorAll("#paymentFilter .pay-preset").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const preset = btn.dataset.range;
+        const { start, end } = paymentRangeBounds(preset);
+        setPaymentPresetActive(preset);
+        syncPaymentDateInputs(start, end);
+        loadPaymentsOverview(true);
+      });
+    });
+    $("payApplyBtn").addEventListener("click", () => {
+      setPaymentPresetActive("custom");
+      document.querySelectorAll("#paymentFilter .pay-preset").forEach(b => b.classList.remove("active"));
+      loadPaymentsOverview(true);
+    });
+    ["payStart", "payEnd"].forEach(id => {
+      $(id).addEventListener("change", () => {
+        setPaymentPresetActive("custom");
+        document.querySelectorAll("#paymentFilter .pay-preset").forEach(b => b.classList.remove("active"));
+      });
+    });
+    initPaymentFilterDefaults();
 
     function switchTab(name) {
       activeTab = name;
@@ -3130,15 +3550,25 @@
         b.setAttribute("aria-selected", isActive ? "true" : "false");
       });
       /* 面板：非活动面板对屏幕阅读器隐藏，避免读屏读到隐藏内容 */
-      const panels = { monitor: $("panelMonitor"), logs: $("panelLogs"), env: $("panelEnv") };
+      const panels = {
+        monitor: $("panelMonitor"),
+        payments: $("panelPayments"),
+        logs: $("panelLogs"),
+        env: $("panelEnv"),
+      };
       Object.entries(panels).forEach(([key, el]) => {
+        if (!el) return;
         const isActive = key === name;
         el.classList.toggle("active", isActive);
         el.setAttribute("aria-hidden", isActive ? "false" : "true");
       });
       const refreshTxt = $("refreshBtn").querySelector(".btn-text");
-      if (refreshTxt) refreshTxt.textContent = name === "logs" ? "刷新日志" : "刷新数据";
+      if (refreshTxt) {
+        refreshTxt.textContent = name === "logs" ? "刷新日志"
+          : name === "payments" ? "刷新交费" : "刷新数据";
+      }
       if (name === "env") loadEnv();
+      if (name === "payments" && dbEnabled) loadPaymentsOverview();
       scheduleLogPolling();
     }
     document.querySelectorAll(".tab-btn").forEach(b => b.addEventListener("click", () => switchTab(b.dataset.tab)));

@@ -6,6 +6,8 @@ ELECTRIC_USAGE_URL = "https://95598.cn/osgweb/electricityCharge"
 BALANCE_URL = "https://95598.cn/osgweb/userAcc"
 BILL_SUMMARY_URL = "https://95598.cn/osgweb/electricityCharge"
 STEP_ELECTRICITY_URL = "https://95598.cn/osgweb/stepElectricityConsumption"
+# 与登录等页统一用无 www 的 95598.cn，避免跨子域丢 cookie 被踢回登录
+PAYMENT_RECORD_URL = "https://95598.cn/osgweb/paymentRecord"
 ELECTRIC_BILL_SUMMARY_URL = (
     "https://95598.cn/osgweb01/electricityChargeQuery/queryElectricBillSummary"
 )
