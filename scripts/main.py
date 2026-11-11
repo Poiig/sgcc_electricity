@@ -21,7 +21,7 @@ from sensor_updator import SensorUpdator
 from mqtt_sensor_updator import MQTTSensorUpdator
 from datetime import datetime,timedelta
 from const import *
-from data_fetcher import DataFetcher
+from data_fetcher import DataFetcher, describe_fetch_result
 
 def main():
     global RETRY_TIMES_LIMIT
@@ -155,8 +155,15 @@ def run_task(data_fetcher: DataFetcher):
         last_error = ""
         for retry_times in range(1, RETRY_TIMES_LIMIT + 1):
             try:
-                data_fetcher.fetch()
-                mark_fetch_finished(True, "定时同步完成")
+                result = data_fetcher.fetch()
+                # fetch() 在登录失败、取不到户号时不抛异常而是返回结果，这里按失败记录
+                # （fetch() 内部已按 RETRY_TIMES_LIMIT 重试过登录，这里不再整轮重试，避免反复登录触发风控）
+                status, detail = describe_fetch_result(result)
+                if status == "failed":
+                    mark_fetch_finished(False, f"定时同步失败: {detail}")
+                else:
+                    # success → "定时同步完成：N 户"；partial → "定时同步部分完成：成功 N 户，失败 M 户（户号）"
+                    mark_fetch_finished(True, f"定时{detail}" if status == "success" else f"定时同步{detail}")
                 return
             except Exception as e:
                 last_error = str(e).strip() or e.__class__.__name__
