@@ -100,7 +100,8 @@ def _last_fetch_timestamp() -> Optional[float]:
                 pass
     if is_db_enabled():
         ts = latest_balance_log_timestamp()
-        if ts is not None:
+        # 数据库时间不带时区，容器与数据库时区不一致时可能算出"未来"的时间，导致冷却时间长达数小时；这种情况忽略
+        if ts is not None and ts <= time.time() + 60:
             return ts
     return None
 
