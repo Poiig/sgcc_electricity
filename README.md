@@ -21,7 +21,7 @@
 - 支持每日/月度/年度分时电量（谷/平/峰/尖）采集
 - 支持住宅用户阶梯用电数据（一/二/三阶已用、剩余、当前阶段）
 - 数据库支持 SQLite / MySQL / PostgreSQL
-- 电费余额不足通知（PushPlus / URL / 企业微信）
+- 电费余额不足通知（PushPlus / Webhook / 企业微信 / iOS Bark）
 - 适用于国家电网覆盖省份（`linux/amd64`、`linux/arm64`）
 
 ---
@@ -164,7 +164,7 @@ Docker Compose 方式通过 `.env` 文件配置，完整配置项见 `example.en
 |------|--------|------|
 | `JOB_START_TIME` | `09:30` | 每天同步开始时间（程序会在该时间及 +12 小时各执行一次） |
 | `REPUBLISH_INTERVAL_MINUTES` | `10` | 从缓存重推 HA 传感器间隔（分钟），`0` 禁用；INFO 只报成功，明细需 `LOG_LEVEL=DEBUG` |
-| `FETCH_FAIL_ALERT` | `true` | 连续多日抓取失败时推送企微告警（需 `WEWORK_WEBHOOK_URL`） |
+| `FETCH_FAIL_ALERT` | `true` | 连续多日抓取失败时告警（企微 Webhook 和/或 `PUSH_TYPE=bark`） |
 | `FETCH_FAIL_ALERT_DAYS` | `2` | 连续失败自然日达到该天数后告警，告警含近期失败原因 |
 | `FETCH_HEALTH_CHECK_TIME` | `22:30` | 日终巡检时刻：当天仍未成功则按阈值告警 |
 | `RUN_ON_STARTUP` | `false` | Docker 启动后立即登录抓取 |
@@ -175,8 +175,21 @@ Docker Compose 方式通过 `.env` 文件配置，完整配置项见 `example.en
 | `IGNORE_USER_ID` | 空 | 忽略的户号（逗号分隔） |
 | `USER_NAMES` | 空 | 户号名称，如 `户号1:我家住宅,户号2:充电桩`；未配置时从国网网站获取。名称含「住宅」的户号才会抓取阶梯用电 |
 | `WEB_DASHBOARD` | true | 启用 Web 控制台 |
-| `PUSH_TYPE` | none | 通知方式（none / pushplus / urlpush / wework） |
+| `PUSH_TYPE` | none | 通知方式（none / pushplus / urlpush / wework / bark） |
 | `DATA_RETENTION_DAYS` | 365 | 数据库记录保留天数，0 表示永久保留 |
+
+### 消息推送渠道
+
+余额不足等通知与 Home Assistant 推送相互独立。按需选择一种 `PUSH_TYPE`（`none` 关闭）：
+
+| 渠道 | `PUSH_TYPE` | 配置文档 |
+|------|-------------|---------|
+| PushPlus | `pushplus` | [PushPlus 配置](docs/PUSHPLUS.md) |
+| 自定义 Webhook | `urlpush` | [Webhook 配置](docs/WEBHOOK.md) |
+| 企业微信群机器人 | `wework` | [企业微信配置](docs/WEWORK.md) |
+| iOS Bark | `bark` | [Bark 配置](docs/BARK.md) |
+
+通用阈值：`BALANCE`（元）。各渠道密钥与铃声、分组、模板等见对应文档与 `example.env`。
 
 ---
 

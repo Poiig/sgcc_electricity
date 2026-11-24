@@ -240,7 +240,7 @@ def _maybe_alert(data: dict, streak: int) -> None:
         save_health(data)
         logging.info("已推送抓取失败告警（连续 %s 天）", streak)
     else:
-        logging.warning("抓取失败告警推送未成功（请检查 WEWORK_WEBHOOK_URL / PUSH_TYPE）")
+        logging.warning("抓取失败告警推送未成功（请检查 WEWORK_WEBHOOK_URL / BARK_KEY / PUSH_TYPE）")
 
 
 def check_daily_health(force_alert: bool = False) -> dict:

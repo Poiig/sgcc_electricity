@@ -763,7 +763,7 @@ class DataFetcher:
                         logging.info("登录二维码已推送到通知渠道")
                     else:
                         logging.warning(
-                            "登录二维码推送失败或未配置渠道，请检查 WEWORK_WEBHOOK_URL 或 PUSH_QRCODE_URL"
+                            "登录二维码推送失败或未配置渠道，请检查 WEWORK_WEBHOOK_URL / PUSH_QRCODE_URL / Bark"
                         )
                 except Exception as e:
                     logging.warning("二维码推送失败 (不影响扫码登录): %s", e)

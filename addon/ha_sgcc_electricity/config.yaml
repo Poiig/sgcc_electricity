@@ -42,6 +42,12 @@ options:
   pushplus_token: ""
   push_url: ""
   wework_webhook_url: ""
+  bark_key: ""
+  bark_server: "https://api.day.app"
+  bark_group: ""
+  bark_sound: ""
+  bark_level: ""
+  bark_push_summary: true
   push_qrcode_url: ""
   fetch_fail_alert: true
   fetch_fail_alert_days: 2
@@ -73,11 +79,17 @@ schema:
   data_retention_days: int(0,3650)
   daily_fetch_days: list(7|30)
   login_fallback: list(qrcode|none)
-  push_type: list(none|pushplus|urlpush|wework)
+  push_type: list(none|pushplus|urlpush|wework|bark)
   balance: float
   pushplus_token: str?
   push_url: str?
   wework_webhook_url: str?
+  bark_key: str?
+  bark_server: str?
+  bark_group: str?
+  bark_sound: str?
+  bark_level: str?
+  bark_push_summary: bool?
   push_qrcode_url: str?
   fetch_fail_alert: bool?
   fetch_fail_alert_days: int(1,30)?

@@ -65,6 +65,21 @@ USER_NAMES=1234567890123:我家住宅,9876543210987:充电桩
 3. 使用 MQTT Explorer 等工具确认消息是否发送成功
 4. 详见 [MQTT 测试指南](MQTT_TEST.md)
 
+## 通知推送相关
+
+### 如何配置余额不足通知？
+
+设置 `PUSH_TYPE` 与对应密钥，并配置 `BALANCE` 阈值。各渠道说明：
+
+- [PushPlus](PUSHPLUS.md)
+- [自定义 Webhook](WEBHOOK.md)
+- [企业微信](WEWORK.md)
+- [iOS Bark](BARK.md)
+
+### Bark 收不到二维码图片？
+
+Bark API 不支持推送图片。请打开 Web 控制台扫码，或另配 `PUSH_QRCODE_URL` / 改用企微 `PUSH_TYPE=wework`。
+
 ## 部署相关
 
 ### Docker 镜像拉取慢

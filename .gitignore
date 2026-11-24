@@ -19,6 +19,10 @@ docs/*
 !docs/FAQ.md
 !docs/RELEASE_*.md
 !docs/WEB_DASHBOARD.md
+!docs/BARK.md
+!docs/PUSHPLUS.md
+!docs/WEBHOOK.md
+!docs/WEWORK.md
 !docs/attachment/
 !docs/attachment/**
 

@@ -1,5 +1,15 @@
 # 更新日志
 
+## 2026-11-24
+
+### 新增
+- **iOS Bark 推送**：`PUSH_TYPE=bark`，支持余额提醒、同步汇总、失败告警与扫码文字提醒；`BARK_KEY` / `BARK_SERVER` / `BARK_GROUP` / `BARK_SOUND` / `BARK_LEVEL` 等可配，详见 [Bark 配置](BARK.md)
+- 推送渠道独立文档：[PushPlus](PUSHPLUS.md)、[Webhook](WEBHOOK.md)、[企业微信](WEWORK.md)
+
+### 优化
+- PushPlus 改为 POST JSON，并支持 `PUSHPLUS_TITLE` / `PUSHPLUS_CONTENT_TEMPLATE` / `PUSHPLUS_TEMPLATE` / `PUSHPLUS_TOPIC` 等参数
+- 自定义 Webhook 载荷增加 `threshold`、`title`；统一 `PUSH_TIMEOUT`
+
 ## 2026-11-11
 
 ### 新增

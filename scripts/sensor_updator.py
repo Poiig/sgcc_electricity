@@ -20,18 +20,8 @@ class SensorUpdator:
         self._init_balance_notify()
 
     def _init_balance_notify(self):
-        push_type = os.getenv("PUSH_TYPE", "None").strip().lower()
-        if push_type == "pushplus":
-            from notify import PushplusNotify
-            self.balance_notify = PushplusNotify()
-        elif push_type == "urlpush":
-            from notify import UrlPushNotify
-            self.balance_notify = UrlPushNotify()
-        elif push_type == "wework":
-            from notify import WeworkNotify
-            self.balance_notify = WeworkNotify()
-        else:
-            self.balance_notify = None
+        from notify import create_balance_notifier
+        self.balance_notify = create_balance_notifier()
 
     def _detail(self, msg: str, *args) -> None:
         """传感器数值等明细日志：缓存重推时降为 DEBUG，正式抓取仍为 INFO。"""
